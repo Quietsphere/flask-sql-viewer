@@ -10,12 +10,13 @@
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <nav style="background-color: #f8f9fa; padding: 10px; margin-bottom: 20px; font-family: sans-serif;">
-    <a href="/" style="margin-right: 20px; font-weight: bold; color: #007bff; text-decoration: none;">Dashboard</a>
-    <a href="/transactions" style="margin-right: 20px; font-weight: bold; color: #007bff; text-decoration: none;">Transactions</a>
-    <a href="/tanklevels" style="font-weight: bold; color: #007bff; text-decoration: none;">Tank Levels</a>
+    <nav>
+    <a href="/">Dashboard</a>
+    <a href="/transactions">Transactions</a>
+    <a href="/tanklevels">Tank Levels</a>
 </nav>
 
     <h1>Tank Levels</h1>
