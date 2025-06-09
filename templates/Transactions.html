@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transactions</title>
+</head>
+<body>
+    <nav style="background-color: #f8f9fa; padding: 10px; margin-bottom: 20px; font-family: sans-serif;">
+        <a href="/" style="margin-right: 20px; font-weight: bold; color: #007bff; text-decoration: none;">Dashboard</a>
+        <a href="/transactions" style="margin-right: 20px; font-weight: bold; color: #007bff; text-decoration: none;">Transactions</a>
+        <a href="/tank-levels" style="font-weight: bold; color: #007bff; text-decoration: none;">Tank Levels</a>
+    </nav>
+
+    <h2>Transactions</h2>
+    <table border="1" cellpadding="5" cellspacing="0">
+        <thead>
+            <tr>
+                {% for header in headers %}
+                    <th>{{ header }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr>
+                    {% for cell in row %}
+                        <td>{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

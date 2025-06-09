@@ -21,9 +21,13 @@ def get_data(query, params=None):
     return list(df.columns), df.values.tolist()
 
 @app.route("/")
-def index():
-    headers, rows = get_data("SELECT TOP 10 * FROM TankLevels ORDER BY [ReadingTimestamp] DESC")
-    return render_template("index.html", headers=headers, rows=rows)
+def dashboard():
+    return render_template("index.html")
+
+@app.route("/transactions")
+def transactions():
+    headers, rows = get_data("SELECT TOP 50 * FROM Transactions ORDER BY [TransactionStartTime] DESC")
+    return render_template("transactions.html", headers=headers, rows=rows)
 
 @app.route("/tanklevels")
 def tank_levels():

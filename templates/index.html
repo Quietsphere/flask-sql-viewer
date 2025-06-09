@@ -1,28 +1,16 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ title or "SQL Table Viewer" }}</title>
+    <title>{{ title or "Fluid Tracker" }}</title>
 </head>
 <body>
-    <h1>{{ title or "SQL Data" }}</h1>
-    <nav>
-        <a href="/">Transactions</a> |
-        <a href="/tanklevels">Tank Levels</a>
-    </nav>
-    <br>
-    <table border="1">
-        <tr>
-            {% for header in headers %}
-                <th>{{ header }}</th>
-            {% endfor %}
-        </tr>
-        {% for row in rows %}
-            <tr>
-                {% for item in row %}
-                    <td>{{ item }}</td>
-                {% endfor %}
-            </tr>
-        {% endfor %}
-    </table>
+    <nav style="background-color: #f8f9fa; padding: 10px; margin-bottom: 20px; font-family: sans-serif;">
+    <a href="/" style="margin-right: 20px; font-weight: bold; color: #007bff; text-decoration: none;">Dashboard</a>
+    <a href="/transactions" style="margin-right: 20px; font-weight: bold; color: #007bff; text-decoration: none;">Transactions</a>
+    <a href="/tank-levels" style="font-weight: bold; color: #007bff; text-decoration: none;">Tank Levels</a>
+</nav>
+
+    <h1>{{ title or "Dashboard" }}</h1>
+    
 </body>
 </html>
