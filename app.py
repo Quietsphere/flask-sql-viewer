@@ -25,7 +25,7 @@ def get_data(query):
 # --- Routes ---
 @app.route("/")
 def index():
-    headers, rows = get_data("SELECT * FROM FluidData")
+    headers, rows = get_data("SELECT * FROM Transactions")
     return render_template("index.html", headers=headers, rows=rows)
 
 @app.route("/tanklevels")
