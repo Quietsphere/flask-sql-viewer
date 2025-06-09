@@ -1,6 +1,6 @@
 import os
-from flask import Flask, render_template
-from sqlalchemy import create_engine
+from flask import Flask, render_template, request
+from sqlalchemy import create_engine, text
 import pandas as pd
 
 app = Flask(__name__)
@@ -16,24 +16,39 @@ connection_string = f"mssql+pyodbc://{username}:{password}@{server}/{database}?d
 engine = create_engine(connection_string)
 
 # --- This is the missing get_data function ---
-def get_data(query):
-    df = pd.read_sql(query, engine)
-    headers = df.columns.tolist()
-    rows = df.values.tolist()
-    return headers, rows
+def get_data(query, params=None):
+    df = pd.read_sql(text(query), engine, params=params)
+    return list(df.columns), df.values.tolist()
 
-# --- Routes ---
 @app.route("/")
 def index():
-    headers, rows = get_data("SELECT * FROM Transactions")
+    headers, rows = get_data("SELECT TOP 10 * FROM TankLevels ORDER BY [Reading Timestamp] DESC")
     return render_template("index.html", headers=headers, rows=rows)
 
 @app.route("/tanklevels")
 def tank_levels():
-    headers, rows = get_data("SELECT * FROM TankLevels ORDER BY ReadingTimestamp DESC")
+    start_date = request.args.get("start")
+    end_date = request.args.get("end")
+
+    base_query = "SELECT * FROM TankLevels"
+    conditions = []
+    params = {}
+
+    if start_date:
+        conditions.append("[Reading Timestamp] >= :start_date")
+        params["start_date"] = start_date
+    if end_date:
+        conditions.append("[Reading Timestamp] <= :end_date")
+        params["end_date"] = end_date
+
+    if conditions:
+        base_query += " WHERE " + " AND ".join(conditions)
+
+    base_query += " ORDER BY [Reading Timestamp] DESC"
+
+    headers, rows = get_data(base_query, params)
     return render_template("tank_levels.html", headers=headers, rows=rows)
 
-# --- Run the app ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

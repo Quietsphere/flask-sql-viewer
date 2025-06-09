@@ -1,17 +1,36 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Tank Level Readings</title>
-    <style>
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-    </style>
+    <title>Tank Levels</title>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
-    <h1>Tank Level Readings</h1>
-    <a href="/">Back to main</a>
-    <table>
+    <h1>Tank Levels</h1>
+
+    <!-- Date Range Filter Form -->
+    <form method="get" action="/tanklevels">
+        <label for="start">Start Date:</label>
+        <input type="date" id="start" name="start">
+        <label for="end">End Date:</label>
+        <input type="date" id="end" name="end">
+        <button type="submit">Filter</button>
+    </form>
+
+    <br>
+
+    <!-- Chart Container -->
+    <canvas id="levelChart" height="100"></canvas>
+    <br>
+
+    <!-- Data Table -->
+    <table id="tankTable" class="display nowrap" style="width:100%">
         <thead>
             <tr>
                 {% for header in headers %}
@@ -22,12 +41,67 @@
         <tbody>
             {% for row in rows %}
                 <tr>
-                    {% for cell in row %}
-                        <td>{{ cell }}</td>
+                    {% for item in row %}
+                        <td>{{ item }}</td>
                     {% endfor %}
                 </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    <script>
+        $(document).ready(function() {
+            const headers = {{ headers | tojson }};
+            const rows = {{ rows | tojson }};
+
+            // Extract the indexes
+            const timestampIndex = headers.indexOf("Reading Timestamp");
+            const volumeIndex = headers.indexOf("Volume");
+
+            const labels = rows.map(row => row[timestampIndex]);
+            const data = rows.map(row => row[volumeIndex]);
+
+            const ctx = document.getElementById('levelChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.reverse(), // Show oldest first
+                    datasets: [{
+                        label: 'Tank Volume',
+                        data: data.reverse(),
+                        borderColor: 'rgb(75, 192, 192)',
+                        fill: false,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Reading Timestamp'
+                            }
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Volume'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Setup DataTable
+            $('#tankTable').DataTable({
+                dom: 'Bfrtip',
+                buttons: ['copyHtml5', 'excelHtml5', 'csvHtml5'],
+                scrollX: true
+            });
+        });
+    </script>
 </body>
 </html>
