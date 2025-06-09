@@ -22,7 +22,7 @@ def get_data(query, params=None):
 
 @app.route("/")
 def index():
-    headers, rows = get_data("SELECT TOP 10 * FROM TankLevels ORDER BY [Reading Timestamp] DESC")
+    headers, rows = get_data("SELECT TOP 10 * FROM TankLevels ORDER BY [ReadingTimestamp] DESC")
     return render_template("index.html", headers=headers, rows=rows)
 
 @app.route("/tanklevels")
@@ -35,16 +35,16 @@ def tank_levels():
     params = {}
 
     if start_date:
-        conditions.append("[Reading Timestamp] >= :start_date")
+        conditions.append("[ReadingTimestamp] >= :start_date")
         params["start_date"] = start_date
     if end_date:
-        conditions.append("[Reading Timestamp] <= :end_date")
+        conditions.append("[ReadingTimestamp] <= :end_date")
         params["end_date"] = end_date
 
     if conditions:
         base_query += " WHERE " + " AND ".join(conditions)
 
-    base_query += " ORDER BY [Reading Timestamp] DESC"
+    base_query += " ORDER BY [ReadingTimestamp] DESC"
 
     headers, rows = get_data(base_query, params)
     return render_template("tank_levels.html", headers=headers, rows=rows)
