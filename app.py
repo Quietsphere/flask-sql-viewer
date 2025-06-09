@@ -33,4 +33,4 @@ def tank_levels():
     return render_template("index.html", headers=headers, rows=rows, title="Tank Level Readings")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
