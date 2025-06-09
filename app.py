@@ -27,7 +27,7 @@ def dashboard():
 @app.route("/transactions")
 def transactions():
     headers, rows = get_data("SELECT TOP 50 * FROM Transactions ORDER BY [TransactionStartTime] DESC")
-    return render_template("transactions.html", headers=headers, rows=rows)
+    return render_template("Transactions.html", headers=headers, rows=rows)
 
 @app.route("/tanklevels")
 def tank_levels():
