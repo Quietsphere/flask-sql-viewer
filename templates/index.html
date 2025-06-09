@@ -1,10 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SQL Table Viewer</title>
+    <title>{{ title or "SQL Table Viewer" }}</title>
 </head>
 <body>
-    <h1>SQL Data</h1>
+    <h1>{{ title or "SQL Data" }}</h1>
+    <nav>
+        <a href="/">Transactions</a> |
+        <a href="/tanklevels">Tank Levels</a>
+    </nav>
+    <br>
     <table border="1">
         <tr>
             {% for header in headers %}
