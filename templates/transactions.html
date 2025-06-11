@@ -26,11 +26,15 @@
         </form>
 
         <!-- Month Navigation -->
+<!-- Month Navigation --> 
 <div>
-    <a href="{{ url_for('transactions', month_offset=-1) }}">Previous Month</a>
+    <a href="{{ url_for('transactions', month_offset=month_offset - 1) }}">&laquo; Previous Month</a>
     <a href="{{ url_for('transactions', month_offset=0) }}">Current Month</a>
-    <a href="{{ url_for('transactions', month_offset=1) }}">Next Month</a>
+    <a href="{{ url_for('transactions', month_offset=month_offset + 1) }}">Next Month &raquo;</a>
 </div>
+
+<h2>Showing data for {{ date_range }}</h2>
+
 
         <table>
             <thead>
