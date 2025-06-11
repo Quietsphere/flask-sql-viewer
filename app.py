@@ -125,13 +125,14 @@ def transactions():
     }
 
     return render_template("transactions.html",
-                           headers=headers,
-                           rows=rows,
-                           start=selected_start.date(),
-                           end=selected_end.date(),
-                           date_range=date_range,
-                           month_offset=month_offset,
-                           **filters)
+                       headers=headers,
+                       rows=rows,
+                       start=selected_start.date(),
+                       end=selected_end.date(),
+                       date_range=date_range,
+                       month_offset=month_offset,
+                       filters=filters)  # pass filters as a dict directly
+
 
 @app.route("/tanklevels")
 def tanklevels():
