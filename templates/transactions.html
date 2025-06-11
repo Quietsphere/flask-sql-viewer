@@ -1,61 +1,142 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Transactions</title>
+
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <!-- DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
+
+    <style>
+        /* Optional styling */
+        .filter-select {
+            width: 200px;
+            margin-right: 1em;
+            margin-bottom: 1em;
+        }
+    </style>
 </head>
 <body>
-    <nav>
+<nav>
     <a href="/">Dashboard</a>
     <a href="/transactions">Transactions</a>
     <a href="/tanklevels">Tank Levels</a>
 </nav>
 
-    <div class="container">
-        <h1>Transactions</h1>
-        <h2>Showing data for {{ date_range }}</h2>
-        <!-- Month Navigation --> 
-<br>
-        <div>
-    <a href="{{ url_for('transactions', month_offset=month_offset - 1) }}">&laquo; Previous Month</a>
-    <a href="{{ url_for('transactions', month_offset=0) }}">Current Month</a>
-    <a href="{{ url_for('transactions', month_offset=month_offset + 1) }}">Next Month &raquo;</a>
-</div>
-<br>
+<div class="container">
+    <h1>Transactions</h1>
+    <h2>Showing data for {{ date_range }}</h2>
 
-        <form method="get" class="filter-form">
-            <label for="start_date">Start Date:</label>
-            <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
-
-            <label for="end_date">End Date:</label>
-            <input type="date" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
-
-            <button type="submit">Filter</button>
-        </form>
-
-
-
-
-
-        <table>
-            <thead>
-                <tr>
-                    {% for header in headers %}
-                        <th>{{ header }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in rows %}
-                    <tr>
-                        {% for value in row %}
-                            <td>{{ value }}</td>
-                        {% endfor %}
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- Month Navigation -->
+    <div>
+        <a href="{{ url_for('transactions', month_offset=month_offset - 1) }}">&laquo; Previous Month</a>
+        <a href="{{ url_for('transactions', month_offset=0) }}">Current Month</a>
+        <a href="{{ url_for('transactions', month_offset=month_offset + 1) }}">Next Month &raquo;</a>
     </div>
+    <br>
+
+    <form method="get" class="filter-form">
+
+        <!-- Keep month_offset to maintain navigation -->
+        <input type="hidden" name="month_offset" value="{{ month_offset }}"/>
+
+        <!-- Date filters -->
+        <label for="start_date">Start Date:</label>
+        <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
+
+        <label for="end_date">End Date:</label>
+        <input type="date" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
+
+        <br>
+
+        <!-- Multi-select dropdowns -->
+        {% for col in ['Station', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
+            <label for="{{ col }}">{{ col }}:</label>
+            <select id="{{ col }}" name="{{ col }}" multiple="multiple" class="filter-select">
+                {% for option in filters[col] %}
+                    <option value="{{ option }}"
+                        {% if option in request.args.getlist(col) %}selected{% endif %}>
+                        {{ option }}
+                    </option>
+                {% endfor %}
+            </select>
+        {% endfor %}
+
+        <br>
+
+        <button type="submit">Filter</button>
+        <a href="{{ url_for('transactions') }}">Reset Filters</a>
+    </form>
+
+    <br>
+
+    <table id="transactions-table" class="display nowrap" style="width:100%">
+        <thead>
+        <tr>
+            {% for header in headers %}
+                <th>{{ header }}</th>
+            {% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+            <tr>
+                {% for value in row %}
+                    <td>{{ value }}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<!-- DataTables Buttons -->
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+
+<!-- JSZip & pdfmake for exporting -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+<script>
+    $(document).ready(function () {
+        // Initialize Select2 for multi-select filters
+        $('.filter-select').select2({
+            placeholder: 'Select options',
+            allowClear: true,
+            width: 'resolve'
+        });
+
+        // Initialize DataTables with export buttons and pagination
+        $('#transactions-table').DataTable({
+            dom: 'Bfrtip',    // Place buttons on top
+            buttons: [
+                'copyHtml5',
+                'csvHtml5',
+                'excelHtml5',
+                'pdfHtml5',
+                'print'
+            ],
+            paging: true,
+            pageLength: 25,
+            lengthMenu: [10, 25, 50, 100],
+            scrollX: true
+        });
+    });
+</script>
+
 </body>
 </html>

@@ -53,47 +53,82 @@ def get_data(query, params=None):
 def dashboard():
     return render_template("index.html")
 
-
 @app.route("/transactions")
 def transactions():
-    # Get the month_offset from query parameters, default to 0
-    month_offset = int(request.args.get("month_offset", 0))
-    product = request.args.get("product")
+    # Handle month offset for navigation
+    try:
+        month_offset = int(request.args.get("month_offset", 0))
+    except ValueError:
+        month_offset = 0
 
-    # Calculate the start and end datetime for the selected month based on offset
-    today = datetime.today()
-    first_of_month = datetime(today.year, today.month, 1)
-    selected_start = first_of_month + relativedelta(months=month_offset)
-    selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
+    # Handle date filtering
+    start_str = request.args.get("start_date")
+    end_str = request.args.get("end_date")
 
-    # Format to string for SQL query
-    start = selected_start.strftime("%Y-%m-%d %H:%M:%S")
-    end = selected_end.strftime("%Y-%m-%d %H:%M:%S")
+    if start_str and end_str:
+        selected_start = datetime.strptime(start_str, "%Y-%m-%d")
+        selected_end = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
+    else:
+        today = datetime.today()
+        selected_start = datetime(today.year, today.month, 1) + relativedelta(months=month_offset)
+        selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
 
-    # Build query and params
+    # Build base query and params
     query = "SELECT * FROM Transactions WHERE [TransactionEndTime] BETWEEN :start AND :end"
-    params = {"start": start, "end": end}
+    params = {"start": selected_start, "end": selected_end}
 
-    if product:
-        query += " AND Product LIKE :product"
-        params["product"] = f"%{product}%"
+    # Multi-select filters
+    def add_multiselect_filter(column_name, param_name=None):
+        values = request.args.getlist(param_name or column_name)
+        if values:
+            placeholders = [f":{column_name}_{i}" for i in range(len(values))]
+            query_parts.append(f"[{column_name}] IN ({', '.join(placeholders)})")
+            for i, v in enumerate(values):
+                params[f"{column_name}_{i}"] = v
+
+    query_parts = []
+
+    add_multiselect_filter("Station")
+    add_multiselect_filter("TransactionType")
+    add_multiselect_filter("DriverName")
+    add_multiselect_filter("CompanyName")
+    add_multiselect_filter("TruckID")
+    add_multiselect_filter("Product")
+    add_multiselect_filter("TankID")
+
+    if query_parts:
+        query += " AND " + " AND ".join(query_parts)
 
     query += " ORDER BY [TransactionEndTime] DESC"
 
     headers, rows = get_data(query, params)
 
-    # Create a readable date range string for display
-    date_range_str = f"{selected_start.strftime('%b %d, %Y')} - {selected_end.strftime('%b %d, %Y')}"
+    # Human-readable date range for title
+    date_range = f"{selected_start.strftime('%b %d, %Y')} – {selected_end.strftime('%b %d, %Y')}"
 
-    return render_template(
-        "transactions.html",
-        headers=headers,
-        rows=rows,
-        month_offset=month_offset,
-        date_range=date_range_str,
-        product=product
-    )
+    # Get dropdown options for each filter
+    def get_distinct_values(column):
+        result = engine.execute(text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]")).fetchall()
+        return [r[0] for r in result if r[0] is not None]
 
+    filters = {
+        "stations": get_distinct_values("Station"),
+        "transaction_types": get_distinct_values("TransactionType"),
+        "driver_names": get_distinct_values("DriverName"),
+        "company_names": get_distinct_values("CompanyName"),
+        "truck_ids": get_distinct_values("TruckID"),
+        "products": get_distinct_values("Product"),
+        "tank_ids": get_distinct_values("TankID"),
+    }
+
+    return render_template("transactions.html",
+                           headers=headers,
+                           rows=rows,
+                           start=selected_start.date(),
+                           end=selected_end.date(),
+                           date_range=date_range,
+                           month_offset=month_offset,
+                           **filters)
 
 @app.route("/tanklevels")
 def tanklevels():
