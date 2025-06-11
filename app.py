@@ -72,7 +72,7 @@ def transactions():
 
 
 @app.route("/tank-levels")
-def tank_levels():
+def tanklevels():
     start, end = get_date_range(request.args)
     tank = request.args.get("tank")
 
@@ -86,7 +86,7 @@ def tank_levels():
     query += " ORDER BY [ReadingTimestamp] DESC"
 
     headers, rows = get_data(query, params)
-    return render_template("tank_levels.html", headers=headers, rows=rows, start=start, end=end)
+    return render_template("tanklevels.html", headers=headers, rows=rows, start=start, end=end)
 
 
 if __name__ == "__main__":
