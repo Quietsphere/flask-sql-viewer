@@ -71,7 +71,7 @@ def transactions():
     return render_template("transactions.html", headers=headers, rows=rows, start=start, end=end)
 
 
-@app.route("/tank-levels")
+@app.route("/tanklevels")
 def tanklevels():
     start, end = get_date_range(request.args)
     tank = request.args.get("tank")
