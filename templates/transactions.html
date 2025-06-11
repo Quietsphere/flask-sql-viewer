@@ -25,11 +25,12 @@
             <button type="submit">Filter</button>
         </form>
 
-        <div class="month-nav">
-            <a href="{{ url_for('transactions', month_offset=(month_offset - 1)) }}">&laquo; Previous Month</a>
-            <span>{{ current_month.strftime("%B %Y") }}</span>
-            <a href="{{ url_for('transactions', month_offset=(month_offset + 1)) }}">Next Month &raquo;</a>
-        </div>
+        <!-- Month Navigation -->
+<div>
+    <a href="{{ url_for('transactions', month_offset=-1) }}">Previous Month</a>
+    <a href="{{ url_for('transactions', month_offset=0) }}">Current Month</a>
+    <a href="{{ url_for('transactions', month_offset=1) }}">Next Month</a>
+</div>
 
         <table>
             <thead>
