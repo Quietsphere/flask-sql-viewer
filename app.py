@@ -58,14 +58,14 @@ def transactions():
     start, end = get_date_range(request.args)
     product = request.args.get("product")
 
-    query = "SELECT * FROM Transactions WHERE [Timestamp] BETWEEN :start AND :end"
+    query = "SELECT * FROM Transactions WHERE [TransactionEndTime] BETWEEN :start AND :end"
     params = {"start": start, "end": end}
 
     if product:
         query += " AND Product LIKE :product"
         params["product"] = f"%{product}%"
 
-    query += " ORDER BY [Timestamp] DESC"
+    query += " ORDER BY [TransactionEndTime] DESC"
 
     headers, rows = get_data(query, params)
     return render_template("transactions.html", headers=headers, rows=rows, start=start, end=end)
