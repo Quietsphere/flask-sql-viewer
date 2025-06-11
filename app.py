@@ -53,6 +53,13 @@ def get_data(query, params=None):
 def dashboard():
     return render_template("index.html")
 
+# Define this outside of any route function
+def get_distinct_values(column):
+    with engine.connect() as conn:
+        result = conn.execute(text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]"))
+        rows = result.fetchall()
+    return [row[0] for row in rows if row[0] is not None]
+
 @app.route("/transactions")
 def transactions():
     # Handle month offset for navigation
@@ -107,13 +114,6 @@ def transactions():
     date_range = f"{selected_start.strftime('%b %d, %Y')} – {selected_end.strftime('%b %d, %Y')}"
 
     # Get dropdown options for each filter
-def get_distinct_values(column):
-    with engine.connect() as conn:
-        result = conn.execute(text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]"))
-        rows = result.fetchall()
-    return [row[0] for row in rows if row[0] is not None]
-
-
     filters = {
         "stations": get_distinct_values("Station"),
         "transaction_types": get_distinct_values("TransactionType"),
