@@ -20,10 +20,19 @@
     <a href="/tanklevels">Tank Levels</a>
 </nav>
 
-<h2>Showing data for {{ date_range }}</h2>
+
 
 
     <h1>Tank Levels</h1>
+    <h2>Showing data for {{ date_range }}</h2>
+    <!-- Month Navigation -->
+<br>
+    <div>
+    <a href="{{ url_for('tanklevels', month_offset=month_offset - 1) }}">&laquo; Previous Month</a>
+    <a href="{{ url_for('tanklevels', month_offset=0) }}">Current Month</a>
+    <a href="{{ url_for('tanklevels', month_offset=month_offset + 1) }}">Next Month &raquo;</a>
+</div>
+<br>
 
     <!-- Date Range Filter Form -->
 <form method="get">
@@ -39,12 +48,7 @@
     <button type="submit">Filter</button>
 </form>
 
-<!-- Month Navigation -->
-<div>
-    <a href="{{ url_for('tanklevels', month_offset=month_offset - 1) }}">&laquo; Previous Month</a>
-    <a href="{{ url_for('tanklevels', month_offset=0) }}">Current Month</a>
-    <a href="{{ url_for('tanklevels', month_offset=month_offset + 1) }}">Next Month &raquo;</a>
-</div>
+
 
     <br>
 
