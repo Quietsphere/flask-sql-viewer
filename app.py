@@ -108,8 +108,10 @@ def transactions():
 
     # Get dropdown options for each filter
     def get_distinct_values(column):
-        result = engine.execute(text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]")).fetchall()
-        return [r[0] for r in result if r[0] is not None]
+    with engine.connect() as conn:
+        result = conn.execute(text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]"))
+        rows = result.fetchall()
+    return [row[0] for row in rows if row[0] is not None]
 
     filters = {
         "stations": get_distinct_values("Station"),
