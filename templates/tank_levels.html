@@ -22,13 +22,25 @@
     <h1>Tank Levels</h1>
 
     <!-- Date Range Filter Form -->
-    <form method="get" action="/tanklevels">
-        <label for="start">Start Date:</label>
-        <input type="date" id="start" name="start">
-        <label for="end">End Date:</label>
-        <input type="date" id="end" name="end">
-        <button type="submit">Filter</button>
-    </form>
+<form method="get">
+    <label for="tank">Tank Name:</label>
+    <input type="text" name="tank" id="tank" value="{{ request.args.get('tank', '') }}">
+
+    <label for="start_date">From:</label>
+    <input type="date" name="start_date" id="start_date" value="{{ start }}">
+
+    <label for="end_date">To:</label>
+    <input type="date" name="end_date" id="end_date" value="{{ end }}">
+
+    <button type="submit">Filter</button>
+</form>
+
+<!-- Month Navigation -->
+<div>
+    <a href="{{ url_for('tank_levels', month_offset=-1) }}">⬅️ Previous Month</a>
+    <a href="{{ url_for('tank_levels', month_offset=1) }}">Next Month ➡️</a>
+</div>
+
 
     <br>
 

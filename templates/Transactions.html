@@ -1,34 +1,56 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>Transactions</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
 </head>
 <body>
     <nav>
-        <a href="/">Dashboard</a>
-        <a href="/transactions">Transactions</a>
-        <a href="/tanklevels">Tank Levels</a>
+        <ul class="nav">
+            <li><a href="{{ url_for('index') }}">Dashboard</a></li>
+            <li><a href="{{ url_for('transactions') }}" class="active">Transactions</a></li>
+            <li><a href="{{ url_for('tanklevels') }}">Tank Levels</a></li>
+        </ul>
     </nav>
 
-    <h1>Transactions</h1>
-    <table>
-        <thead>
-            <tr>
-                {% for header in headers %}
-                    <th>{{ header }}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in rows %}
+    <div class="container">
+        <h1>Transactions</h1>
+
+        <form method="get" class="filter-form">
+            <label for="start_date">Start Date:</label>
+            <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
+
+            <label for="end_date">End Date:</label>
+            <input type="date" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
+
+            <button type="submit">Filter</button>
+        </form>
+
+        <div class="month-nav">
+            <a href="{{ url_for('transactions', month_offset=(month_offset - 1)) }}">&laquo; Previous Month</a>
+            <span>{{ current_month.strftime("%B %Y") }}</span>
+            <a href="{{ url_for('transactions', month_offset=(month_offset + 1)) }}">Next Month &raquo;</a>
+        </div>
+
+        <table>
+            <thead>
                 <tr>
-                    {% for cell in row %}
-                        <td>{{ cell }}</td>
+                    {% for header in headers %}
+                        <th>{{ header }}</th>
                     {% endfor %}
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        {% for value in row %}
+                            <td>{{ value }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </body>
 </html>
