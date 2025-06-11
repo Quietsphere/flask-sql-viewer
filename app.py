@@ -95,7 +95,7 @@ def transactions():
 
     query_parts = []
 
-    add_multiselect_filter("Station")
+    add_multiselect_filter("StationID")
     add_multiselect_filter("TransactionType")
     add_multiselect_filter("DriverName")
     add_multiselect_filter("CompanyName")
@@ -115,7 +115,7 @@ def transactions():
 
     # Get dropdown options for each filter
     filters = {
-        "stations": get_distinct_values("Station"),
+        "stations": get_distinct_values("StationID"),
         "transaction_types": get_distinct_values("TransactionType"),
         "driver_names": get_distinct_values("DriverName"),
         "company_names": get_distinct_values("CompanyName"),

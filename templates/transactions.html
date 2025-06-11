@@ -53,7 +53,7 @@
         <br>
 
         <!-- Multi-select dropdowns -->
-        {% for col in ['Station', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
+        {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
             <label for="{{ col }}">{{ col }}:</label>
             <select id="{{ col }}" name="{{ col }}" multiple="multiple" class="filter-select">
                 {% for option in filters[col] %}
