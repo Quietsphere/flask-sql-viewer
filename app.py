@@ -117,13 +117,13 @@ def transactions():
 
     # Get dropdown options for each filter
     filters = {
-        "stations": get_distinct_values("StationID"),
-        "transaction_types": get_distinct_values("TransactionType"),
-        "driver_names": get_distinct_values("DriverName"),
-        "company_names": get_distinct_values("CompanyName"),
-        "truck_ids": get_distinct_values("TruckID"),
-        "products": get_distinct_values("Product"),
-        "tank_ids": get_distinct_values("TankID"),
+        "StationID": get_distinct_values("StationID"),
+        "transactionType": get_distinct_values("TransactionType"),
+        "DriverName": get_distinct_values("DriverName"),
+        "CompanyName": get_distinct_values("CompanyName"),
+        "TruckID": get_distinct_values("TruckID"),
+        "Product": get_distinct_values("Product"),
+        "TankID": get_distinct_values("TankID"),
     }
 
     return render_template("transactions.html",
