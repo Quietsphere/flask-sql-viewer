@@ -46,3 +46,30 @@ th {
 tr:nth-child(even) {
     background-color: #f9f9f9;
 }
+
+/* --- Select2 Enhancements --- */
+
+.filter-select {
+    width: 250px;
+    margin-right: 1em;
+    margin-bottom: 1em;
+}
+
+/* Make selected items readable in multi-selects */
+.select2-container--default .select2-selection--multiple {
+    min-height: 38px;
+    max-height: 100px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Allow wrapped text for selected options */
+.select2-container--default .select2-selection--multiple .select2-selection__rendered {
+    display: block;
+    white-space: normal;
+}
+
+/* Ensure dropdowns display over other content */
+.select2-container {
+    z-index: 9999;
+}
