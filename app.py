@@ -55,10 +55,12 @@ def dashboard():
 
 # Define this outside of any route function
 def get_distinct_values(column):
+    query = text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]")
     with engine.connect() as conn:
-        result = conn.execute(text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]"))
+        result = conn.execute(query)
         rows = result.fetchall()
-    return [row[0] for row in rows if row[0] is not None]
+    # Remove None and convert all to strings just in case
+    return [str(row[0]) for row in rows if row[0] is not None]
 
 @app.route("/transactions")
 def transactions():
