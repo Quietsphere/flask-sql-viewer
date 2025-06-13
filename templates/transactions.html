@@ -54,11 +54,14 @@
     </div>
     <br>
 
+<details open>
+    <summary><strong>Filter Options</strong></summary>
     <form method="get" class="filter-form">
         {% if not request.args %}
             <input type="hidden" name="month_offset" value="{{ month_offset }}"/>
         {% endif %}
 
+        <!-- Date filters -->
         <label for="start_date">Start Date:</label>
         <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
 
@@ -67,6 +70,7 @@
 
         <br>
 
+        <!-- Multi-selects -->
         {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
             <label for="{{ col }}">{{ col }}:</label>
             <select id="{{ col }}" name="{{ col }}" multiple="multiple" class="filter-select">
@@ -84,6 +88,8 @@
         <button type="submit">Filter</button>
         <a href="{{ url_for('transactions') }}">Reset Filters</a>
     </form>
+</details>
+
 
     <br>
 
@@ -106,6 +112,10 @@
         </tbody>
     </table>
 </div>
+<div id="volume-total" style="margin-top: 1em; font-weight: bold;">
+    Total Volume Delivered: <span id="total-volume">Calculating...</span>
+</div>
+
 
 <!-- jQuery -->
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
@@ -126,40 +136,83 @@
 
 <script>
     $(document).ready(function () {
-        // Initialize Select2 for multi-select filters
+        // Initialize Select2
         $('.filter-select').select2({
             placeholder: 'Select options',
             allowClear: true,
             width: 'resolve'
         });
 
-        // Auto-submit form when filters are changed
-        $('.filter-select').on('change', function () {
+        // Auto-submit on change
+        $('.filter-select, #start_date, #end_date').on('change', function () {
             $('.filter-form').submit();
         });
 
-        $('#start_date, #end_date').on('change', function () {
-            $('.filter-form').submit();
-        });
+        // Get dynamic filename
+        const getExportFilename = () => {
+            const start = $('#start_date').val() || 'start';
+            const end = $('#end_date').val() || 'end';
+            return `transactions_${start}_to_${end}`;
+        };
 
-        // Initialize DataTables
-        $('#transactions-table').DataTable({
+        // Initialize DataTable
+        const table = $('#transactions-table').DataTable({
             dom: 'Bfrtip',
             buttons: [
-                'copyHtml5',
-                'csvHtml5',
-                'excelHtml5',
-                'pdfHtml5',
-                'print'
+                {
+                    extend: 'copyHtml5',
+                    title: null,
+                    filename: getExportFilename
+                },
+                {
+                    extend: 'csvHtml5',
+                    title: null,
+                    filename: getExportFilename
+                },
+                {
+                    extend: 'excelHtml5',
+                    title: null,
+                    filename: getExportFilename
+                },
+                {
+                    extend: 'pdfHtml5',
+                    title: getExportFilename(),
+                    filename: getExportFilename
+                },
+                {
+                    extend: 'print',
+                    title: getExportFilename()
+                }
             ],
             paging: true,
             pageLength: 25,
             lengthMenu: [10, 25, 50, 100],
             scrollX: true,
-            stateSave: true
+            stateSave: true,
+            drawCallback: function () {
+                updateTotalVolume();
+            }
         });
+
+        // Update total volume
+        function updateTotalVolume() {
+            const volumeIndex = $('#transactions-table thead th').toArray().findIndex(th =>
+                $(th).text().toLowerCase().includes('volume')
+            );
+            let total = 0;
+            table.rows({ filter: 'applied' }).every(function () {
+                const data = this.data();
+                const val = parseFloat(data[volumeIndex]) || 0;
+                total += val;
+            });
+            $('#total-volume').text(total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+        }
+
+        // Initial run
+        updateTotalVolume();
     });
 </script>
+
 
 </body>
 </html>

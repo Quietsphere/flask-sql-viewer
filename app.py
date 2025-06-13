@@ -118,7 +118,7 @@ def transactions():
     # Get dropdown options for each filter
     filters = {
         "StationID": get_distinct_values("StationID"),
-        "transactionType": get_distinct_values("TransactionType"),
+        "TransactionType": get_distinct_values("TransactionType"),
         "DriverName": get_distinct_values("DriverName"),
         "CompanyName": get_distinct_values("CompanyName"),
         "TruckID": get_distinct_values("TruckID"),
