@@ -10,8 +10,10 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
 
+    <!-- Select2 CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
+
     <style>
-        /* Optional styling */
         .filter-select {
             width: 200px;
             margin-right: 1em;
@@ -30,6 +32,20 @@
     <h1>Transactions</h1>
     <h2>Showing data for {{ date_range }}</h2>
 
+    <!-- Active filters summary -->
+    {% set active_filters = [] %}
+    {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
+        {% set selected = request.args.getlist(col) %}
+        {% if selected %}
+            {% set label = col.replace('ID', '') %}
+            {% set values = selected | join(', ') %}
+            {% set _ = active_filters.append(label ~ ': ' ~ values) %}
+        {% endif %}
+    {% endfor %}
+    {% if active_filters %}
+        <p><strong>Active Filters:</strong> {{ active_filters | join(' | ') }}</p>
+    {% endif %}
+
     <!-- Month Navigation -->
     <div>
         <a href="{{ url_for('transactions', month_offset=month_offset - 1) }}">&laquo; Previous Month</a>
@@ -39,11 +55,10 @@
     <br>
 
     <form method="get" class="filter-form">
+        {% if not request.args %}
+            <input type="hidden" name="month_offset" value="{{ month_offset }}"/>
+        {% endif %}
 
-        <!-- Keep month_offset to maintain navigation -->
-        <input type="hidden" name="month_offset" value="{{ month_offset }}"/>
-
-        <!-- Date filters -->
         <label for="start_date">Start Date:</label>
         <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
 
@@ -52,10 +67,10 @@
 
         <br>
 
-        <!-- Multi-select dropdowns -->
         {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
             <label for="{{ col }}">{{ col }}:</label>
             <select id="{{ col }}" name="{{ col }}" multiple="multiple" class="filter-select">
+                <option></option>
                 {% for option in filters[col] %}
                     <option value="{{ option }}"
                         {% if option in request.args.getlist(col) %}selected{% endif %}>
@@ -66,7 +81,6 @@
         {% endfor %}
 
         <br>
-
         <button type="submit">Filter</button>
         <a href="{{ url_for('transactions') }}">Reset Filters</a>
     </form>
@@ -98,7 +112,6 @@
 
 <!-- DataTables JS -->
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<!-- DataTables Buttons -->
 <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
@@ -120,9 +133,18 @@
             width: 'resolve'
         });
 
-        // Initialize DataTables with export buttons and pagination
+        // Auto-submit form when filters are changed
+        $('.filter-select').on('change', function () {
+            $('.filter-form').submit();
+        });
+
+        $('#start_date, #end_date').on('change', function () {
+            $('.filter-form').submit();
+        });
+
+        // Initialize DataTables
         $('#transactions-table').DataTable({
-            dom: 'Bfrtip',    // Place buttons on top
+            dom: 'Bfrtip',
             buttons: [
                 'copyHtml5',
                 'csvHtml5',
@@ -133,7 +155,8 @@
             paging: true,
             pageLength: 25,
             lengthMenu: [10, 25, 50, 100],
-            scrollX: true
+            scrollX: true,
+            stateSave: true
         });
     });
 </script>
