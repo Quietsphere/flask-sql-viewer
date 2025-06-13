@@ -101,7 +101,6 @@
             </div>
 
             <br>
-            <button type="submit">Filter</button>
             <a href="{{ url_for('transactions') }}">Reset Filters</a>
         </form>
     </details>
@@ -151,55 +150,54 @@
 
 <script>
     $(document).ready(function () {
+        // Initialize Select2
         $('.filter-select').select2({
             placeholder: 'Select options',
             allowClear: true,
             width: 'resolve'
         });
 
+        // Auto-submit filters
         $('.filter-select, #start_date, #end_date').on('change', function () {
             $('.filter-form').submit();
         });
 
+        // Get export filename
         const getExportFilename = () => {
             const start = $('#start_date').val() || 'start';
             const end = $('#end_date').val() || 'end';
             return `transactions_${start}_to_${end}`;
         };
 
+        // Initialize DataTable
         const table = $('#transactions-table').DataTable({
-            dom: 'Bfrtip',
+            dom: '<"top"f>rt<"bottom"Blip><"clear">',
             buttons: [
                 {
-                    extend: 'colvis',
-                    text: 'Toggle Columns'
-                },
-                {
                     extend: 'copyHtml5',
-                    filename: getExportFilename,
-                    exportOptions: { columns: ':visible' }
+                    exportOptions: { columns: ':visible' },
+                    filename: getExportFilename
                 },
                 {
                     extend: 'csvHtml5',
-                    filename: getExportFilename,
-                    exportOptions: { columns: ':visible' }
+                    exportOptions: { columns: ':visible' },
+                    filename: getExportFilename
                 },
                 {
                     extend: 'excelHtml5',
-                    filename: getExportFilename,
-                    exportOptions: { columns: ':visible' }
+                    exportOptions: { columns: ':visible' },
+                    filename: getExportFilename
                 },
                 {
                     extend: 'pdfHtml5',
-                    filename: getExportFilename,
-                    title: getExportFilename(),
-                    exportOptions: { columns: ':visible' }
+                    exportOptions: { columns: ':visible' },
+                    filename: getExportFilename
                 },
                 {
                     extend: 'print',
-                    title: getExportFilename(),
                     exportOptions: { columns: ':visible' }
-                }
+                },
+                'colvis'
             ],
             paging: true,
             pageLength: 25,
@@ -212,19 +210,23 @@
         });
 
         function updateTotalVolume() {
-            const volumeIndex = $('#transactions-table thead th').toArray().findIndex(th =>
-                $(th).text().trim().toLowerCase() === 'volumedelivered'
-            );
+            const volumeIndex = $('#transactions-table thead th')
+                .toArray()
+                .findIndex(th => $(th).text().trim().toLowerCase() === 'volumedelivered');
+
             if (volumeIndex === -1) {
                 $('#total-volume').text('N/A');
                 return;
             }
 
             let total = 0;
-            table.rows({ filter: 'applied' }).every(function () {
-                const val = parseFloat(this.data()[volumeIndex].toString().replace(/[^0-9.-]+/g, '')) || 0;
-                total += val;
+            table.rows({ search: 'applied' }).every(function () {
+                const data = this.data();
+                const raw = data[volumeIndex];
+                const num = parseFloat(String(raw).replace(/[^0-9.-]+/g, ''));
+                if (!isNaN(num)) total += num;
             });
+
             $('#total-volume').text(
                 total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             );
@@ -233,5 +235,6 @@
         updateTotalVolume();
     });
 </script>
+
 </body>
 </html>
