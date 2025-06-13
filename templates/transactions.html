@@ -9,25 +9,28 @@
     <!-- DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
     <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
-    <link rel="stylesheet" href="https://cdn.datatables.net/colvis/1.3.1/css/buttons.dataTables.min.css" />
 
     <!-- Select2 CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
 
     <style>
-        .filter-select {
-            width: 200px;
-            margin-right: 1em;
-            margin-bottom: 1em;
-        }
         .filter-grid {
             display: flex;
             flex-wrap: wrap;
-            gap: 1em;
+            gap: 1rem;
+        }
+        .filter-card {
+            background: #f9f9f9;
+            padding: 1rem;
+            border-radius: 6px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+            min-width: 200px;
+            flex: 1 1 200px;
         }
         .dataTables_filter {
             float: none !important;
             text-align: left !important;
+            margin-bottom: 1em;
         }
     </style>
 </head>
@@ -42,6 +45,7 @@
     <h1>Transactions</h1>
     <h2>Showing data for {{ date_range }}</h2>
 
+    <!-- Active filters summary -->
     {% set active_filters = [] %}
     {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
         {% set selected = request.args.getlist(col) %}
@@ -71,28 +75,28 @@
             {% endif %}
 
             <div class="filter-grid">
-                <div>
-                    <label for="start_date">Start Date:</label>
+                <div class="filter-card">
+                    <label for="start_date">Start Date</label>
                     <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
                 </div>
-                <div>
-                    <label for="end_date">End Date:</label>
+                <div class="filter-card">
+                    <label for="end_date">End Date</label>
                     <input type="date" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
                 </div>
 
                 {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
-                    <div>
-                        <label for="{{ col }}">{{ col }}:</label>
-                        <select id="{{ col }}" name="{{ col }}" multiple="multiple" class="filter-select">
-                            <option></option>
-                            {% for option in filters[col] %}
-                                <option value="{{ option }}"
-                                    {% if option in request.args.getlist(col) %}selected{% endif %}>
-                                    {{ option }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
+                <div class="filter-card">
+                    <label for="{{ col }}">{{ col }}</label>
+                    <select id="{{ col }}" name="{{ col }}" multiple="multiple" class="filter-select">
+                        <option></option>
+                        {% for option in filters[col] %}
+                            <option value="{{ option }}"
+                                {% if option in request.args.getlist(col) %}selected{% endif %}>
+                                {{ option }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
                 {% endfor %}
             </div>
 
@@ -158,42 +162,43 @@
         });
 
         const getExportFilename = () => {
-            const start = $('#start_date').val();
-            const end = $('#end_date').val();
-            if (start && end) {
-                return `transactions_${start}_to_${end}`;
-            } else {
-                return "transactions_all_data";
-            }
+            const start = $('#start_date').val() || 'start';
+            const end = $('#end_date').val() || 'end';
+            return `transactions_${start}_to_${end}`;
         };
 
         const table = $('#transactions-table').DataTable({
             dom: 'Bfrtip',
             buttons: [
-                'colvis',
+                {
+                    extend: 'colvis',
+                    text: 'Toggle Columns'
+                },
                 {
                     extend: 'copyHtml5',
-                    title: null,
-                    filename: getExportFilename
+                    filename: getExportFilename,
+                    exportOptions: { columns: ':visible' }
                 },
                 {
                     extend: 'csvHtml5',
-                    title: null,
-                    filename: getExportFilename
+                    filename: getExportFilename,
+                    exportOptions: { columns: ':visible' }
                 },
                 {
                     extend: 'excelHtml5',
-                    title: null,
-                    filename: getExportFilename
+                    filename: getExportFilename,
+                    exportOptions: { columns: ':visible' }
                 },
                 {
                     extend: 'pdfHtml5',
+                    filename: getExportFilename,
                     title: getExportFilename(),
-                    filename: getExportFilename
+                    exportOptions: { columns: ':visible' }
                 },
                 {
                     extend: 'print',
-                    title: getExportFilename()
+                    title: getExportFilename(),
+                    exportOptions: { columns: ':visible' }
                 }
             ],
             paging: true,
@@ -210,20 +215,23 @@
             const volumeIndex = $('#transactions-table thead th').toArray().findIndex(th =>
                 $(th).text().trim().toLowerCase() === 'volumedelivered'
             );
-            let total = 0;
-            if (volumeIndex !== -1) {
-                table.rows({ filter: 'applied' }).every(function () {
-                    const data = this.data();
-                    const val = parseFloat(data[volumeIndex].toString().replace(/[^\d.-]/g, '')) || 0;
-                    total += val;
-                });
+            if (volumeIndex === -1) {
+                $('#total-volume').text('N/A');
+                return;
             }
-            $('#total-volume').text(total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' gal');
+
+            let total = 0;
+            table.rows({ filter: 'applied' }).every(function () {
+                const val = parseFloat(this.data()[volumeIndex].toString().replace(/[^0-9.-]+/g, '')) || 0;
+                total += val;
+            });
+            $('#total-volume').text(
+                total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            );
         }
 
         updateTotalVolume();
     });
 </script>
-
 </body>
 </html>
