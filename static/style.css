@@ -73,3 +73,14 @@ tr:nth-child(even) {
 .select2-container {
     z-index: 9999;
 }
+
+.top-search {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 10px;
+}
+
+.top-buttons {
+    margin-bottom: 10px;
+}
+

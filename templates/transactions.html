@@ -107,24 +107,25 @@
 
     <br>
 
-    <table id="transactions-table" class="display nowrap" style="width:100%">
-        <thead>
+<table id="transactions-table" class="display nowrap" style="width:100%" data-column-names="{{ headers | tojson }}">
+    <thead>
+    <tr>
+        {% for header in headers %}
+            <th>{{ header }}</th>
+        {% endfor %}
+    </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
         <tr>
-            {% for header in headers %}
-                <th>{{ header }}</th>
+            {% for value in row %}
+                <td>{{ value }}</td>
             {% endfor %}
         </tr>
-        </thead>
-        <tbody>
-        {% for row in rows %}
-            <tr>
-                {% for value in row %}
-                    <td>{{ value }}</td>
-                {% endfor %}
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    {% endfor %}
+    </tbody>
+</table>
+
 </div>
 <div id="volume-total" style="margin-top: 1em; font-weight: bold;">
     Total Volume Delivered: <span id="total-volume">Calculating...</span>
@@ -157,21 +158,25 @@
             width: 'resolve'
         });
 
-        // Auto-submit filters
         $('.filter-select, #start_date, #end_date').on('change', function () {
             $('.filter-form').submit();
         });
 
-        // Get export filename
+        // Get filename based on date
         const getExportFilename = () => {
             const start = $('#start_date').val() || 'start';
             const end = $('#end_date').val() || 'end';
             return `transactions_${start}_to_${end}`;
         };
 
-        // Initialize DataTable
+        const columnNames = $('#transactions-table').data('column-names') || [];
+        const volumeIndex = columnNames.findIndex(name =>
+            name.toLowerCase().replace(/\s+/g, '') === 'volumedelivered'
+        );
+
+        // Setup DataTable
         const table = $('#transactions-table').DataTable({
-            dom: '<"top"f>rt<"bottom"Blip><"clear">',
+            dom: '<"top-search"f><"top-buttons"B>rt<"bottom"lip><"clear">',
             buttons: [
                 {
                     extend: 'copyHtml5',
@@ -210,25 +215,26 @@
         });
 
         function updateTotalVolume() {
-            const volumeIndex = $('#transactions-table thead th')
-                .toArray()
-                .findIndex(th => $(th).text().trim().toLowerCase() === 'volumedelivered');
-
             if (volumeIndex === -1) {
-                $('#total-volume').text('N/A');
+                $('#total-volume').text('Column not found');
                 return;
             }
 
             let total = 0;
             table.rows({ search: 'applied' }).every(function () {
                 const data = this.data();
-                const raw = data[volumeIndex];
-                const num = parseFloat(String(raw).replace(/[^0-9.-]+/g, ''));
-                if (!isNaN(num)) total += num;
+                const rawValue = data[volumeIndex];
+                const num = parseFloat(String(rawValue).replace(/[^0-9.\-]+/g, ''));
+                if (!isNaN(num)) {
+                    total += num;
+                }
             });
 
             $('#total-volume').text(
-                total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                total.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                })
             );
         }
 
