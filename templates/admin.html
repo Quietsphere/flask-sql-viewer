@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav>
+    <a href="/">Dashboard</a>
+    <a href="/transactions">Transactions</a>
+    <a href="/tanklevels">Tank Levels</a>
+    <a href="/admin">Admin Panel</a>
+</nav>
+    <h1>Admin Panel</h1>
+
+    <h2>Users</h2>
+    <table border="1">
+        <tr><th>Email</th><th>Admin?</th></tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.Email }}</td>
+            <td>{{ 'Yes' if user.IsAdmin else 'No' }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Sites</h2>
+    <table border="1">
+        <tr><th>Site Name</th></tr>
+        {% for site in sites %}
+        <tr><td>{{ site.SiteName }}</td></tr>
+        {% endfor %}
+    </table>
+
+    <h2>User-Site Assignments</h2>
+    <table border="1">
+        <tr><th>User Email</th><th>Site</th></tr>
+        {% for assign in assignments %}
+        <tr><td>{{ assign.Email }}</td><td>{{ assign.SiteName }}</td></tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
