@@ -74,13 +74,18 @@ tr:nth-child(even) {
     z-index: 9999;
 }
 
-.top-search {
+.top-container {
     display: flex;
-    justify-content: flex-start;
-    margin-bottom: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-bottom: 1em;
+}
+.top-buttons {
+    margin-bottom: 1em;
+}
+.top-search {
+    margin-bottom: 0.5em;
+    width: 100%;
 }
 
-.top-buttons {
-    margin-bottom: 10px;
-}
 

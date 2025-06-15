@@ -107,28 +107,29 @@
 
     <br>
 
-<table id="transactions-table" class="display nowrap" style="width:100%" data-column-names="{{ headers | tojson }}">
+<table id="transactions-table" class="display nowrap" style="width:100%;" data-column-names='{{ headers | tojson }}'>
     <thead>
-    <tr>
-        {% for header in headers %}
-            <th>{{ header }}</th>
-        {% endfor %}
-    </tr>
-    </thead>
-    <tbody>
-    {% for row in rows %}
         <tr>
-            {% for value in row %}
-                <td>{{ value }}</td>
+            {% for header in headers %}
+                <th>{{ header }}</th>
             {% endfor %}
         </tr>
-    {% endfor %}
+    </thead>
+    <tbody>
+        {% for row in rows %}
+            <tr>
+                {% for value in row %}
+                    <td>{{ value }}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
     </tbody>
 </table>
 
+
 </div>
-<div id="volume-total" style="margin-top: 1em; font-weight: bold;">
-    Total Volume Delivered: <span id="total-volume">Calculating...</span>
+<div style="margin-top: 1em; font-weight: bold;">
+    Total Volume Delivered: {{ '%.2f' | format(total_volume) }}
 </div>
 
 <!-- jQuery -->
@@ -170,13 +171,15 @@
         };
 
         const columnNames = $('#transactions-table').data('column-names') || [];
+        console.log("Column names:", columnNames);
         const volumeIndex = columnNames.findIndex(name =>
-            name.toLowerCase().replace(/\s+/g, '') === 'volumedelivered'
+            name.toLowerCase().replace(/[^a-z]/g, '') === 'volumedelivered'
+
         );
 
         // Setup DataTable
         const table = $('#transactions-table').DataTable({
-            dom: '<"top-search"f><"top-buttons"B>rt<"bottom"lip><"clear">',
+            dom: '<"top-container"<"top-search"f><"top-buttons"B>>rt<"bottom"lip><"clear">',
             buttons: [
                 {
                     extend: 'copyHtml5',

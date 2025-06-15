@@ -82,11 +82,11 @@ def transactions():
         selected_start = datetime(today.year, today.month, 1) + relativedelta(months=month_offset)
         selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
 
-    # Build base query and params
-    query = "SELECT * FROM Transactions WHERE [TransactionEndTime] BETWEEN :start AND :end"
+    # Base query and filter setup
+    base_query = "FROM Transactions WHERE [TransactionEndTime] BETWEEN :start AND :end"
     params = {"start": selected_start, "end": selected_end}
+    query_parts = []
 
-    # Multi-select filters
     def add_multiselect_filter(column_name, param_name=None):
         values = request.args.getlist(param_name or column_name)
         if values:
@@ -95,24 +95,25 @@ def transactions():
             for i, v in enumerate(values):
                 params[f"{column_name}_{i}"] = v
 
-    query_parts = []
-
-    add_multiselect_filter("StationID")
-    add_multiselect_filter("TransactionType")
-    add_multiselect_filter("DriverName")
-    add_multiselect_filter("CompanyName")
-    add_multiselect_filter("TruckID")
-    add_multiselect_filter("Product")
-    add_multiselect_filter("TankID")
+    for column in ["StationID", "TransactionType", "DriverName", "CompanyName", "TruckID", "Product", "TankID"]:
+        add_multiselect_filter(column)
 
     if query_parts:
-        query += " AND " + " AND ".join(query_parts)
+        filter_clause = " AND " + " AND ".join(query_parts)
+    else:
+        filter_clause = ""
 
-    query += " ORDER BY [TransactionEndTime] DESC"
+    # Data query
+    data_query = f"SELECT * {base_query}{filter_clause} ORDER BY [TransactionEndTime] DESC"
+    headers, rows = get_data(data_query, params)
 
-    headers, rows = get_data(query, params)
+    # Sum query
+    sum_query = f"SELECT SUM(VolumeDelivered) as TotalVolume {base_query}{filter_clause}"
+    with engine.connect() as conn:
+        total_volume = conn.execute(text(sum_query), params).scalar()
+        total_volume = round(total_volume or 0, 2)  # Handle None
 
-    # Human-readable date range for title
+    # Date range formatting
     date_range = f"{selected_start.strftime('%b %d, %Y')} – {selected_end.strftime('%b %d, %Y')}"
 
     # Get dropdown options for each filter
@@ -127,13 +128,14 @@ def transactions():
     }
 
     return render_template("transactions.html",
-                       headers=headers,
-                       rows=rows,
-                       start=selected_start.date(),
-                       end=selected_end.date(),
-                       date_range=date_range,
-                       month_offset=month_offset,
-                       filters=filters)  # pass filters as a dict directly
+                           headers=headers,
+                           rows=rows,
+                           start=selected_start.date(),
+                           end=selected_end.date(),
+                           date_range=date_range,
+                           month_offset=month_offset,
+                           filters=filters,
+                           total_volume=total_volume)
 
 
 @app.route("/tanklevels")
