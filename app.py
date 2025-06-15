@@ -177,9 +177,84 @@ def tanklevels():
     return render_template("tanklevels.html", headers=headers, rows=rows,
                            month_offset=month_offset, date_range=date_range_str)
 
-@app.route("/admin")
+@app.route("/admin", methods=["GET", "POST"])
 @admin_required
 def admin_panel():
+    message_handled = False
+
+    # --- Create new user ---
+    if "new_user_email" in request.form:
+        email = request.form["new_user_email"].strip().lower()
+        password = request.form["new_user_password"]
+        is_admin = bool(request.form.get("new_user_is_admin"))
+
+        with engine.connect() as conn:
+            existing = conn.execute(
+                text("SELECT 1 FROM Users WHERE LOWER(Email) = :email"),
+                {"email": email}
+            ).fetchone()
+
+        if existing:
+            flash("A user with that email already exists.", "warning")
+        else:
+            password_hash = generate_password_hash(password)
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        INSERT INTO Users (Email, PasswordHash, IsAdmin)
+                        VALUES (:email, :password_hash, :is_admin)
+                    """), {
+                        "email": email,
+                        "password_hash": password_hash,
+                        "is_admin": int(is_admin)
+                    })
+                flash("User created successfully.", "success")
+            except Exception as e:
+                flash(f"Error creating user: {e}", "danger")
+        message_handled = True
+
+    # --- Create new site ---
+    elif "new_site_name" in request.form:
+        site_name = request.form["new_site_name"].strip()
+        if site_name:
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        INSERT INTO Sites (SiteName) VALUES (:site_name)
+                    """), {"site_name": site_name})
+                flash("Site created successfully.", "success")
+            except Exception as e:
+                flash(f"Error creating site: {e}", "danger")
+        else:
+            flash("Site name cannot be empty.", "warning")
+        message_handled = True
+
+    # --- Edit site ---
+    elif "edit_site_id" in request.form:
+        site_id = request.form["edit_site_id"]
+        site_name = request.form["edit_site_name"].strip()
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE Sites SET SiteName = :site_name WHERE SiteID = :site_id
+                """), {"site_name": site_name, "site_id": site_id})
+            flash("Site updated successfully.", "success")
+        except Exception as e:
+            flash(f"Error updating site: {e}", "danger")
+        message_handled = True
+
+    # --- Delete site ---
+    elif "delete_site_id" in request.form:
+        site_id = request.form["delete_site_id"]
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("DELETE FROM Sites WHERE SiteID = :site_id"), {"site_id": site_id})
+            flash("Site deleted.", "info")
+        except Exception as e:
+            flash(f"Error deleting site: {e}", "danger")
+        message_handled = True
+
+    # --- Fetch data for display ---
     with engine.connect() as conn:
         users = conn.execute(text("SELECT UserID, Email, IsAdmin FROM Users ORDER BY Email")).fetchall()
         sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
@@ -190,7 +265,97 @@ def admin_panel():
             JOIN Sites s ON usa.SiteID = s.SiteID
             ORDER BY u.Email, s.SiteName
         """)).fetchall()
-    return render_template("admin.html", users=users, sites=sites, assignments=assignments)
+
+    ret# Add to app.py
+
+# Add to app.py
+
+@app.route("/admin/users", methods=["GET", "POST"])
+@admin_required
+def admin_users():
+    if request.method == "POST":
+        form_type = request.form.get("form_type")
+
+        if form_type == "create_user":
+            email = request.form["email"].strip().lower()
+            password = request.form["password"]
+            is_admin = bool(request.form.get("is_admin"))
+
+            with engine.connect() as conn:
+                existing = conn.execute(text("SELECT 1 FROM Users WHERE LOWER(Email) = :email"), {"email": email}).fetchone()
+
+            if existing:
+                flash("A user with that email already exists.", "warning")
+            else:
+                password_hash = generate_password_hash(password)
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        INSERT INTO Users (Email, PasswordHash, IsAdmin)
+                        VALUES (:email, :password_hash, :is_admin)
+                    """), {"email": email, "password_hash": password_hash, "is_admin": int(is_admin)})
+                flash("User created successfully.", "success")
+
+        elif form_type == "edit_user":
+            user_id = request.form["user_id"]
+            email = request.form["email"].strip().lower()
+            is_admin = bool(request.form.get("is_admin"))
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE Users SET Email = :email, IsAdmin = :is_admin WHERE UserID = :user_id
+                """), {"email": email, "is_admin": int(is_admin), "user_id": user_id})
+            flash("User updated.", "info")
+
+        elif form_type == "delete_user":
+            user_id = request.form["user_id"]
+            with engine.begin() as conn:
+                conn.execute(text("DELETE FROM Users WHERE UserID = :user_id"), {"user_id": user_id})
+            flash("User deleted.", "info")
+
+    with engine.connect() as conn:
+        users = conn.execute(text("SELECT UserID, Email, IsAdmin FROM Users ORDER BY Email")).fetchall()
+        assignments = conn.execute(text("""
+            SELECT u.Email, s.SiteName FROM UserSiteAccess usa
+            JOIN Users u ON usa.UserID = u.UserID
+            JOIN Sites s ON usa.SiteID = s.SiteID
+            ORDER BY u.Email, s.SiteName
+        """)).fetchall()
+
+    return render_template("admin_users.html", users=users, assignments=assignments)
+
+
+@app.route("/admin/sites", methods=["GET", "POST"])
+@admin_required
+def admin_sites():
+    if request.method == "POST":
+        form_type = request.form.get("form_type")
+
+        if form_type == "create_site":
+            site_name = request.form["site_name"].strip()
+            if site_name:
+                with engine.begin() as conn:
+                    conn.execute(text("INSERT INTO Sites (SiteName) VALUES (:site_name)"), {"site_name": site_name})
+                flash("Site created successfully.", "success")
+
+        elif form_type == "edit_site":
+            site_id = request.form["site_id"]
+            site_name = request.form["site_name"].strip()
+            with engine.begin() as conn:
+                conn.execute(text("UPDATE Sites SET SiteName = :site_name WHERE SiteID = :site_id"), {"site_name": site_name, "site_id": site_id})
+            flash("Site updated.", "info")
+
+        elif form_type == "delete_site":
+            site_id = request.form["site_id"]
+            with engine.begin() as conn:
+                conn.execute(text("DELETE FROM Sites WHERE SiteID = :site_id"), {"site_id": site_id})
+            flash("Site deleted.", "info")
+
+    with engine.connect() as conn:
+        sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
+
+    return render_template("admin_sites.html", sites=sites)
+
+
+
 
 @app.route("/reset_password_request", methods=["GET", "POST"])
 def reset_password_request():

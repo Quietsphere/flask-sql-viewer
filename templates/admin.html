@@ -4,41 +4,122 @@
     <meta charset="UTF-8">
     <title>Admin Panel</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        details {
+            margin-bottom: 1em;
+            border: 1px solid #ccc;
+            padding: 0.5em;
+            border-radius: 5px;
+        }
+
+        summary {
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1.1em;
+        }
+    </style>
 </head>
 <body>
 <nav>
     <a href="/">Dashboard</a>
     <a href="/transactions">Transactions</a>
     <a href="/tanklevels">Tank Levels</a>
-    <a href="/admin">Admin Panel</a>
+    <a href="/admin">Admin</a>
+    <a href="/logout">Logout</a>
 </nav>
-    <h1>Admin Panel</h1>
+
+<h1>Admin Panel</h1>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+        <li class="flash {{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+<!-- User Management Section -->
+<details open>
+    <summary>User Management</summary>
 
     <h2>Users</h2>
-    <table border="1">
-        <tr><th>Email</th><th>Admin?</th></tr>
-        {% for user in users %}
-        <tr>
-            <td>{{ user.Email }}</td>
-            <td>{{ 'Yes' if user.IsAdmin else 'No' }}</td>
-        </tr>
-        {% endfor %}
+    <table>
+        <thead>
+            <tr><th>Email</th><th>Is Admin</th><th>Sites</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+                <tr>
+                    <td>{{ user.Email }}</td>
+                    <td>{{ "Yes" if user.IsAdmin else "No" }}</td>
+                    <td>
+                        {% for a in assignments if a.Email == user.Email %}
+                            {{ a.SiteName }}{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </td>
+                    <td>
+                        <form method="post" action="{{ url_for('admin_panel') }}" style="display:inline;">
+                            <input type="hidden" name="form_type" value="edit_user">
+                            <input type="hidden" name="user_id" value="{{ user.UserID }}">
+                            <input type="email" name="email" value="{{ user.Email }}" required>
+                            <label>
+                                Admin:
+                                <input type="checkbox" name="is_admin" value="1" {% if user.IsAdmin %}checked{% endif %}>
+                            </label>
+                            <button type="submit">Save</button>
+                        </form>
+                        <form method="post" action="{{ url_for('admin_panel') }}" style="display:inline;" onsubmit="return confirm('Delete this user?');">
+                            <input type="hidden" name="form_type" value="delete_user">
+                            <input type="hidden" name="user_id" value="{{ user.UserID }}">
+                            <button type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
     </table>
+
+    <h3>Add User</h3>
+    <form method="post" action="{{ url_for('admin_panel') }}">
+        <input type="hidden" name="form_type" value="create_user">
+        <label>Email: <input type="email" name="new_user_email" required></label><br>
+        <label>Password: <input type="password" name="new_user_password" required></label><br>
+        <label>Is Admin: <input type="checkbox" name="new_user_is_admin" value="1"></label><br>
+        <button type="submit">Add User</button>
+    </form>
+</details>
+
+<!-- Asset Management Section -->
+<details>
+    <summary>Asset Management</summary>
 
     <h2>Sites</h2>
-    <table border="1">
-        <tr><th>Site Name</th></tr>
+    <ul>
         {% for site in sites %}
-        <tr><td>{{ site.SiteName }}</td></tr>
+            <li>
+                <form method="post" action="{{ url_for('admin_panel') }}">
+                    <input type="hidden" name="edit_site_id" value="{{ site.SiteID }}">
+                    <input type="text" name="edit_site_name" value="{{ site.SiteName }}" required>
+                    <button type="submit">Update</button>
+                </form>
+                <form method="post" action="{{ url_for('admin_panel') }}" onsubmit="return confirm('Delete this site?');" style="display:inline;">
+                    <input type="hidden" name="delete_site_id" value="{{ site.SiteID }}">
+                    <button type="submit">Delete</button>
+                </form>
+            </li>
         {% endfor %}
-    </table>
+    </ul>
 
-    <h2>User-Site Assignments</h2>
-    <table border="1">
-        <tr><th>User Email</th><th>Site</th></tr>
-        {% for assign in assignments %}
-        <tr><td>{{ assign.Email }}</td><td>{{ assign.SiteName }}</td></tr>
-        {% endfor %}
-    </table>
+    <h3>Add Site</h3>
+    <form method="post" action="{{ url_for('admin_panel') }}">
+        <label>Site Name:
+            <input type="text" name="new_site_name" required>
+        </label>
+        <button type="submit">Create Site</button>
+    </form>
+</details>
+
 </body>
 </html>

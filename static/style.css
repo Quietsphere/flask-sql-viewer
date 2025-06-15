@@ -87,5 +87,36 @@ tr:nth-child(even) {
     margin-bottom: 0.5em;
     width: 100%;
 }
+.flashes {
+    list-style-type: none;
+    padding: 0;
+}
+
+.flashes li {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+}
+
+.flashes li.success {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.flashes li.danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.flashes li.warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.flashes li.info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
 
 

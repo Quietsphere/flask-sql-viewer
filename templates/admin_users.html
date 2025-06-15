@@ -1,0 +1,76 @@
+<!-- templates/admin_users.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Management</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav>
+    <a href="/">Dashboard</a>
+    <a href="/transactions">Transactions</a>
+    <a href="/tanklevels">Tank Levels</a>
+    <a href="/admin/users">User Management</a>
+    <a href="/admin/sites">Site Management</a>
+    <a href="/logout">Logout</a>
+</nav>
+
+<h1>User Management</h1>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <ul class="flashes">
+      {% for category, message in messages %}
+        <li class="flash {{ category }}">{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endwith %}
+
+<h2>Users</h2>
+<table>
+    <thead>
+        <tr><th>Email</th><th>Is Admin</th><th>Sites</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+            <tr>
+                <td>{{ user.Email }}</td>
+                <td>{{ "Yes" if user.IsAdmin else "No" }}</td>
+                <td>
+                    {% for a in assignments if a.Email == user.Email %}
+                        {{ a.SiteName }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </td>
+                <td>
+                    <form method="post" style="display:inline;">
+                        <input type="hidden" name="form_type" value="edit_user">
+                        <input type="hidden" name="user_id" value="{{ user.UserID }}">
+                        <input type="email" name="email" value="{{ user.Email }}" required>
+                        <label>Admin:
+                            <input type="checkbox" name="is_admin" value="1" {% if user.IsAdmin %}checked{% endif %}>
+                        </label>
+                        <button type="submit">Save</button>
+                    </form>
+                    <form method="post" style="display:inline;" onsubmit="return confirm('Delete this user?');">
+                        <input type="hidden" name="form_type" value="delete_user">
+                        <input type="hidden" name="user_id" value="{{ user.UserID }}">
+                        <button type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<h2>Add User</h2>
+<form method="post">
+    <input type="hidden" name="form_type" value="create_user">
+    <label>Email: <input type="email" name="email" required></label><br>
+    <label>Password: <input type="password" name="password" required></label><br>
+    <label>Is Admin: <input type="checkbox" name="is_admin" value="1"></label><br>
+    <button type="submit">Add User</button>
+</form>
+</body>
+</html>
