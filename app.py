@@ -22,6 +22,16 @@ driver = 'ODBC Driver 17 for SQL Server'
 connection_string = f"mssql+pyodbc://{username}:{password}@{server}/{database}?driver={driver.replace(' ', '+')}"
 engine = create_engine(connection_string)
 
+def get_user_site_access(user_id):
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT usa.SiteID, s.SiteName, usa.HasFullAccess
+            FROM UserSiteAccess usa
+            JOIN Sites s ON usa.SiteID = s.SiteID
+            WHERE usa.UserID = :user_id
+        """), {"user_id": user_id}).fetchall()
+    return rows
+
 def get_date_range(request_args):
     today = date.today()
     start_date = request_args.get("start_date")
@@ -323,12 +333,16 @@ def admin_users():
         form_type = request.form.get("form_type")
 
         if form_type == "create_user":
+            user_name = request.form.get("user_name", "").strip()
             email = request.form["email"].strip().lower()
             password = request.form["password"]
             is_admin = bool(request.form.get("is_admin"))
 
             with engine.connect() as conn:
-                existing = conn.execute(text("SELECT 1 FROM Users WHERE LOWER(Email) = :email"), {"email": email}).fetchone()
+                existing = conn.execute(
+                    text("SELECT 1 FROM Users WHERE LOWER(Email) = :email"),
+                    {"email": email}
+                ).fetchone()
 
             if existing:
                 flash("A user with that email already exists.", "warning")
@@ -336,20 +350,53 @@ def admin_users():
                 password_hash = generate_password_hash(password)
                 with engine.begin() as conn:
                     conn.execute(text("""
-                        INSERT INTO Users (Email, PasswordHash, IsAdmin)
-                        VALUES (:email, :password_hash, :is_admin)
-                    """), {"email": email, "password_hash": password_hash, "is_admin": int(is_admin)})
+                        INSERT INTO Users (UserName, Email, PasswordHash, IsAdmin)
+                        VALUES (:user_name, :email, :password_hash, :is_admin)
+                    """), {
+                        "user_name": user_name,
+                        "email": email,
+                        "password_hash": password_hash,
+                        "is_admin": int(is_admin)
+                    })
                 flash("User created successfully.", "success")
 
         elif form_type == "edit_user":
             user_id = request.form["user_id"]
             email = request.form["email"].strip().lower()
             is_admin = bool(request.form.get("is_admin"))
+            user_name = request.form.get("user_name", "").strip()
+
+            # Save user info
             with engine.begin() as conn:
                 conn.execute(text("""
-                    UPDATE Users SET Email = :email, IsAdmin = :is_admin WHERE UserID = :user_id
-                """), {"email": email, "is_admin": int(is_admin), "user_id": user_id})
-            flash("User updated.", "info")
+                    UPDATE Users
+                    SET Email = :email, IsAdmin = :is_admin, UserName =:user_name
+                    WHERE UserID = :user_id
+                """), {
+                    "email": email,
+                    "is_admin": int(is_admin),
+                    "user_name": user_name,
+                    "user_id": user_id
+                })
+
+                # Remove old site assignments
+                conn.execute(text("DELETE FROM UserSiteAccess WHERE UserID = :user_id"), {"user_id": user_id})
+
+                # Insert new assignments
+                site_ids = request.form.getlist("site_ids")
+                for site_id in site_ids:
+                    full_access = request.form.get(f"full_access_{site_id}") == "1"
+                    conn.execute(text("""
+                        INSERT INTO UserSiteAccess (UserID, SiteID, HasFullAccess)
+                        VALUES (:user_id, :site_id, :has_full_access)
+                    """), {
+                        "user_id": user_id,
+                        "site_id": site_id,
+                        "has_full_access": int(full_access)
+                    })
+
+            flash("User and site access updated.", "success")
+
 
         elif form_type == "delete_user":
             user_id = request.form["user_id"]
@@ -357,16 +404,46 @@ def admin_users():
                 conn.execute(text("DELETE FROM Users WHERE UserID = :user_id"), {"user_id": user_id})
             flash("User deleted.", "info")
 
+        elif form_type == "assign_site":
+            user_id = request.form["user_id"]
+            site_id = request.form["site_id"]
+            has_full_access = bool(request.form.get("has_full_access"))
+
+            with engine.begin() as conn:
+                existing = conn.execute(text("""
+                    SELECT 1 FROM UserSiteAccess
+                    WHERE UserID = :user_id AND SiteID = :site_id
+                """), {
+                    "user_id": user_id,
+                    "site_id": site_id
+                }).fetchone()
+
+                if existing:
+                    flash("This user already has access to the selected site.", "warning")
+                else:
+                    conn.execute(text("""
+                        INSERT INTO UserSiteAccess (UserID, SiteID, HasFullAccess)
+                        VALUES (:user_id, :site_id, :has_full_access)
+                    """), {
+                        "user_id": user_id,
+                        "site_id": site_id,
+                        "has_full_access": int(has_full_access)
+                    })
+                    flash("Site access assigned successfully.", "success")
+
     with engine.connect() as conn:
-        users = conn.execute(text("SELECT UserID, Email, IsAdmin FROM Users ORDER BY Email")).fetchall()
+        users = conn.execute(text("SELECT UserID, Email, UserName, IsAdmin FROM Users ORDER BY UserName")).fetchall()
         assignments = conn.execute(text("""
-            SELECT u.Email, s.SiteName FROM UserSiteAccess usa
+            SELECT usa.UserID, u.Email, s.SiteName, usa.SiteID, usa.HasFullAccess, u.UserName
+            FROM UserSiteAccess usa
             JOIN Users u ON usa.UserID = u.UserID
             JOIN Sites s ON usa.SiteID = s.SiteID
-            ORDER BY u.Email, s.SiteName
+            ORDER BY u.UserName, s.SiteName
         """)).fetchall()
+        sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
 
-    return render_template("admin_users.html", users=users, assignments=assignments)
+    return render_template("admin_users.html", users=users, assignments=assignments, sites=sites)
+
 
 
 @app.route("/admin/sites", methods=["GET", "POST"])

@@ -9,14 +9,17 @@
 <body class="container py-4">
 
 <!-- Navigation -->
-<nav class="mb-4">
-    <a href="/" class="btn btn-primary me-2">Dashboard</a>
-    <a href="/transactions" class="btn btn-secondary me-2">Transactions</a>
-    <a href="/tanklevels" class="btn btn-secondary me-2">Tank Levels</a>
-    <a href="/admin/users" class="btn btn-secondary me-2">Users</a>
-    <a href="/admin/sites" class="btn btn-secondary me-2">Sites and Assets</a>
-    <a href="/logout" class="btn btn-danger">Logout</a>
+<nav>
+    <a href="/">Dashboard</a>
+    <a href="/transactions">Transactions</a>
+    <a href="/tanklevels">Tank Levels</a>
+    {% if session.get("is_admin") %}
+        <a href="/admin/users">Users</a>
+        <a href="/admin/sites">Sites and Assets</a>
+    {% endif %}
+    <a href="/logout">Logout</a>
 </nav>
+
 
 <!-- Flash Messages -->
 {% with messages = get_flashed_messages(with_categories=true) %}
