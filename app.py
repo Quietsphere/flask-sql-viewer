@@ -67,6 +67,34 @@ def admin_required(f):
             return redirect(url_for("dashboard"))
         return f(*args, **kwargs)
     return decorated_function
+def sync_assets_from_data():
+    with engine.begin() as conn:
+        existing_names = {
+            row[0] for row in conn.execute(text("SELECT AssetName FROM Assets")).fetchall()
+        }
+
+        # Sync TankIDs
+        tanks = conn.execute(text("SELECT DISTINCT TankID FROM TankLevels WHERE TankID IS NOT NULL")).fetchall()
+        for row in tanks:
+            name = row.TankID
+            if name and name not in existing_names:
+                conn.execute(text("""
+                    INSERT INTO Assets (AssetName, AssetType, Description)
+                    VALUES (:name, 'Tank', 'Auto-imported from TankLevels')
+                """), {"name": name})
+                existing_names.add(name)
+
+        # Sync StationIDs
+        stations = conn.execute(text("SELECT DISTINCT StationID FROM Transactions WHERE StationID IS NOT NULL")).fetchall()
+        for row in stations:
+            name = row.StationID
+            if name and name not in existing_names:
+                conn.execute(text("""
+                    INSERT INTO Assets (AssetName, AssetType, Description)
+                    VALUES (:name, 'Station', 'Auto-imported from Transactions')
+                """), {"name": name})
+                existing_names.add(name)
+
 
 @app.route("/")
 @login_required
@@ -158,10 +186,22 @@ def transactions():
 @app.route("/tanklevels")
 @login_required
 def tanklevels():
-    month_offset = int(request.args.get('month_offset', 0))
-    today = datetime.today()
-    selected_start = datetime(today.year, today.month, 1) + relativedelta(months=month_offset)
-    selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
+    try:
+        month_offset = int(request.args.get('month_offset', 0))
+    except ValueError:
+        month_offset = 0
+
+    start_str = request.args.get("start_date")
+    end_str = request.args.get("end_date")
+
+    if start_str and end_str:
+        selected_start = datetime.strptime(start_str, "%Y-%m-%d")
+        selected_end = datetime.strptime(end_str, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
+    else:
+        today = datetime.today()
+        selected_start = datetime(today.year, today.month, 1) + relativedelta(months=month_offset)
+        selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
+
     start, end = selected_start.strftime("%Y-%m-%d %H:%M:%S"), selected_end.strftime("%Y-%m-%d %H:%M:%S")
     tank = request.args.get("tank")
 
@@ -175,11 +215,15 @@ def tanklevels():
     headers, rows = get_data(query, params)
     date_range_str = f"{selected_start.strftime('%b %d, %Y')} - {selected_end.strftime('%b %d, %Y')}"
     return render_template("tanklevels.html", headers=headers, rows=rows,
+                           start=selected_start.date(), end=selected_end.date(),
                            month_offset=month_offset, date_range=date_range_str)
+
 
 @app.route("/admin", methods=["GET", "POST"])
 @admin_required
 def admin_panel():
+    print("Form data:", request.form)
+
     message_handled = False
 
     # --- Create new user ---
@@ -214,8 +258,8 @@ def admin_panel():
         message_handled = True
 
     # --- Create new site ---
-    elif "new_site_name" in request.form:
-        site_name = request.form["new_site_name"].strip()
+    elif request.form.get("form_type") == "create_site":
+        site_name = request.form.get("new_site_name", "").strip()
         if site_name:
             try:
                 with engine.begin() as conn:
@@ -227,7 +271,9 @@ def admin_panel():
                 flash(f"Error creating site: {e}", "danger")
         else:
             flash("Site name cannot be empty.", "warning")
-        message_handled = True
+        return redirect(url_for("admin_sites"))  # <-- this is required
+
+
 
     # --- Edit site ---
     elif "edit_site_id" in request.form:
@@ -326,34 +372,95 @@ def admin_users():
 @app.route("/admin/sites", methods=["GET", "POST"])
 @admin_required
 def admin_sites():
+    sync_assets_from_data()  # Ensure assets are synced from source tables
+
     if request.method == "POST":
         form_type = request.form.get("form_type")
 
         if form_type == "create_site":
-            site_name = request.form["site_name"].strip()
+            site_name = request.form.get("site_name", "").strip()
             if site_name:
-                with engine.begin() as conn:
-                    conn.execute(text("INSERT INTO Sites (SiteName) VALUES (:site_name)"), {"site_name": site_name})
-                flash("Site created successfully.", "success")
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text("""
+                            INSERT INTO Sites (SiteName) VALUES (:site_name)
+                        """), {"site_name": site_name})
+                    flash("Site created successfully.", "success")
+                except Exception as e:
+                    flash(f"Error creating site: {e}", "danger")
+            else:
+                flash("Site name cannot be empty.", "warning")
+            return redirect(url_for("admin_sites"))
 
         elif form_type == "edit_site":
-            site_id = request.form["site_id"]
-            site_name = request.form["site_name"].strip()
-            with engine.begin() as conn:
-                conn.execute(text("UPDATE Sites SET SiteName = :site_name WHERE SiteID = :site_id"), {"site_name": site_name, "site_id": site_id})
-            flash("Site updated.", "info")
+            site_id = request.form.get("edit_site_id")
+            site_name = request.form.get("edit_site_name", "").strip()
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("""
+                        UPDATE Sites SET SiteName = :site_name WHERE SiteID = :site_id
+                    """), {"site_name": site_name, "site_id": site_id})
+                flash("Site updated successfully.", "success")
+            except Exception as e:
+                flash(f"Error updating site: {e}", "danger")
+            return redirect(url_for("admin_sites"))
 
         elif form_type == "delete_site":
+            site_id = request.form.get("delete_site_id")
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("DELETE FROM Sites WHERE SiteID = :site_id"), {"site_id": site_id})
+                flash("Site deleted.", "info")
+            except Exception as e:
+                flash(f"Error deleting site: {e}", "danger")
+            return redirect(url_for("admin_sites"))
+
+        elif form_type == "assign_site_asset":
+            asset_id = request.form["asset_id"]
             site_id = request.form["site_id"]
             with engine.begin() as conn:
-                conn.execute(text("DELETE FROM Sites WHERE SiteID = :site_id"), {"site_id": site_id})
-            flash("Site deleted.", "info")
+                conn.execute(text("""
+                    UPDATE Assets SET SiteID = :site_id WHERE AssetID = :asset_id
+                """), {"site_id": site_id, "asset_id": asset_id})
+            flash("Asset assigned to site.", "success")
+            return redirect(url_for("admin_sites"))
 
+        elif form_type == "update_asset_details":
+            asset_id = request.form["asset_id"]
+            local_name = request.form.get("local_name", "").strip()
+            asset_type = request.form.get("asset_type", "").strip()
+            description = request.form.get("description", "").strip()
+            site_id = request.form.get("site_id") or None
+
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE Assets
+                    SET LocalName = :local_name,
+                        AssetType = :asset_type,
+                        Description = :description,
+                        SiteID = :site_id
+                    WHERE AssetID = :asset_id
+                """), {
+                    "local_name": local_name,
+                    "asset_type": asset_type,
+                    "description": description,
+                    "site_id": site_id,
+                    "asset_id": asset_id
+                })
+            flash("Asset updated successfully.", "success")
+            return redirect(url_for("admin_sites"))
+
+    # On GET or after POST actions, fetch updated data
     with engine.connect() as conn:
         sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
+        assets = conn.execute(text("""
+            SELECT a.AssetID, a.AssetName, a.LocalName, a.AssetType, a.Description, a.SiteID, s.SiteName
+            FROM Assets a
+            LEFT JOIN Sites s ON a.SiteID = s.SiteID
+            ORDER BY a.AssetName
+        """)).fetchall()
 
-    return render_template("admin_sites.html", sites=sites)
-
+    return render_template("admin_sites.html", sites=sites, assets=assets)
 
 
 

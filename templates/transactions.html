@@ -1,252 +1,199 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Transactions</title>
+  <meta charset="UTF-8" />
+  <title>Transactions</title>
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
 
-    <!-- DataTables CSS -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
-
-    <!-- Select2 CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
-
-    <style>
-        .filter-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        .filter-card {
-            background: #f9f9f9;
-            padding: 1rem;
-            border-radius: 6px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.1);
-            min-width: 200px;
-            flex: 1 1 200px;
-        }
-        .dataTables_filter {
-            float: none !important;
-            text-align: left !important;
-            margin-bottom: 1em;
-        }
-    </style>
+  <style>
+    .select2-container .select2-selection--multiple {
+      min-height: 38px;
+      border-radius: 0.375rem;
+    }
+    .filter-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .filter-card {
+      flex: 1 1 250px;
+    }
+    .top-buttons {
+      margin-bottom: 10px;
+    }
+    .dataTables_filter {
+      float: none !important;
+      text-align: left !important;
+      margin-bottom: 1em;
+    }
+  </style>
 </head>
-<body>
-<nav>
-    <a href="/">Dashboard</a>
-    <a href="/transactions">Transactions</a>
-    <a href="/tanklevels">Tank Levels</a>
-    <a href="/admin/users">User Management</a>
-    <a href="/admin/sites">Site Management</a>
-    <a href="/logout">Logout</a>
-</nav>
 
-<div class="container">
-    <h1>Transactions</h1>
-    <h2>Showing data for {{ date_range }}</h2>
+<body class="container py-4">
+  <!-- Navigation -->
+  <nav class="mb-4">
+    <a href="/" class="btn btn-secondary me-2">Dashboard</a>
+    <a href="/transactions" class="btn btn-primary me-2">Transactions</a>
+    <a href="/tanklevels" class="btn btn-secondary me-2">Tank Levels</a>
+    <a href="/admin/users" class="btn btn-secondary me-2">Users</a>
+    <a href="/admin/sites" class="btn btn-secondary me-2">Sites & Assets</a>
+    <a href="/logout" class="btn btn-danger">Logout</a>
+  </nav>
 
-    <!-- Active filters summary -->
-    {% set active_filters = [] %}
-    {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
-        {% set selected = request.args.getlist(col) %}
-        {% if selected %}
-            {% set label = col.replace('ID', '') %}
-            {% set values = selected | join(', ') %}
-            {% set _ = active_filters.append(label ~ ': ' ~ values) %}
-        {% endif %}
-    {% endfor %}
-    {% if active_filters %}
-        <p><strong>Active Filters:</strong> {{ active_filters | join(' | ') }}</p>
+  <h1>Transactions</h1>
+  <h5 class="text-muted mb-3">Showing data for {{ date_range }}</h5>
+
+  <!-- Active Filters -->
+  {% set active_filters = [] %}
+  {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
+    {% set selected = request.args.getlist(col) %}
+    {% if selected %}
+      {% set label = col.replace('ID', '') %}
+      {% set values = selected | join(', ') %}
+      {% set _ = active_filters.append(label ~ ': ' ~ values) %}
     {% endif %}
+  {% endfor %}
+  {% if active_filters %}
+    <div class="alert alert-info"><strong>Active Filters:</strong> {{ active_filters | join(' | ') }}</div>
+  {% endif %}
 
-    <!-- Month Navigation -->
-    <div>
-        <a href="{{ url_for('transactions', month_offset=month_offset - 1) }}">&laquo; Previous Month</a>
-        <a href="{{ url_for('transactions', month_offset=0) }}">Current Month</a>
-        <a href="{{ url_for('transactions', month_offset=month_offset + 1) }}">Next Month &raquo;</a>
-    </div>
-    <br>
+  <!-- Month Navigation -->
+  <div class="mb-3">
+    <a href="{{ url_for('transactions', month_offset=month_offset - 1) }}" class="btn btn-outline-secondary btn-sm">&laquo; Previous Month</a>
+    <a href="{{ url_for('transactions', month_offset=0) }}" class="btn btn-outline-primary btn-sm">Current Month</a>
+    <a href="{{ url_for('transactions', month_offset=month_offset + 1) }}" class="btn btn-outline-secondary btn-sm">Next Month &raquo;</a>
+  </div>
 
-    <details open>
-        <summary><strong>Filter Options</strong></summary>
-        <form method="get" class="filter-form">
-            {% if not request.args %}
-                <input type="hidden" name="month_offset" value="{{ month_offset }}"/>
-            {% endif %}
+  <!-- Filter Options -->
+  <details class="mb-4" open>
+    <summary><strong>Filter Options</strong></summary>
+    <form method="get" class="mt-3 filter-form">
+      {% if not request.args %}
+        <input type="hidden" name="month_offset" value="{{ month_offset }}" />
+      {% endif %}
+      <div class="filter-grid">
+        <div class="filter-card">
+          <label for="start_date" class="form-label">Start Date</label>
+          <input type="date" id="start_date" name="start_date" class="form-control" value="{{ request.args.get('start_date', '') }}">
+        </div>
+        <div class="filter-card">
+          <label for="end_date" class="form-label">End Date</label>
+          <input type="date" id="end_date" name="end_date" class="form-control" value="{{ request.args.get('end_date', '') }}">
+        </div>
 
-            <div class="filter-grid">
-                <div class="filter-card">
-                    <label for="start_date">Start Date</label>
-                    <input type="date" id="start_date" name="start_date" value="{{ request.args.get('start_date', '') }}">
-                </div>
-                <div class="filter-card">
-                    <label for="end_date">End Date</label>
-                    <input type="date" id="end_date" name="end_date" value="{{ request.args.get('end_date', '') }}">
-                </div>
-
-                {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
-                <div class="filter-card">
-                    <label for="{{ col }}">{{ col }}</label>
-                    <select id="{{ col }}" name="{{ col }}" multiple="multiple" class="filter-select">
-                        <option></option>
-                        {% for option in filters[col] %}
-                            <option value="{{ option }}"
-                                {% if option in request.args.getlist(col) %}selected{% endif %}>
-                                {{ option }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endfor %}
-            </div>
-
-            <br>
-            <a href="{{ url_for('transactions') }}">Reset Filters</a>
-        </form>
-    </details>
-
-    <br>
-
-<table id="transactions-table" class="display nowrap" style="width:100%;" data-column-names='{{ headers | tojson }}'>
-    <thead>
-        <tr>
-            {% for header in headers %}
-                <th>{{ header }}</th>
+        {% for col in ['StationID', 'TransactionType', 'DriverName', 'CompanyName', 'TruckID', 'Product', 'TankID'] %}
+        <div class="filter-card">
+          <label for="{{ col }}" class="form-label">{{ col }}</label>
+          <select id="{{ col }}" name="{{ col }}" multiple class="form-select filter-select">
+            {% for option in filters[col] %}
+              <option value="{{ option }}" {% if option in request.args.getlist(col) %}selected{% endif %}>{{ option }}</option>
             {% endfor %}
-        </tr>
+          </select>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="mt-3">
+        <a href="{{ url_for('transactions') }}" class="btn btn-outline-secondary">Reset Filters</a>
+      </div>
+    </form>
+  </details>
+
+  <!-- Transactions Table -->
+  <table id="transactions-table" class="table table-striped table-bordered nowrap w-100" data-column-names='{{ headers | tojson }}'>
+    <thead class="table-light">
+      <tr>
+        {% for header in headers %}
+          <th>{{ header }}</th>
+        {% endfor %}
+      </tr>
     </thead>
     <tbody>
-        {% for row in rows %}
-            <tr>
-                {% for value in row %}
-                    <td>{{ value }}</td>
-                {% endfor %}
-            </tr>
+      {% for row in rows %}
+      <tr>
+        {% for value in row %}
+        <td>{{ value }}</td>
         {% endfor %}
+      </tr>
+      {% endfor %}
     </tbody>
-</table>
+  </table>
 
+  <div class="mt-3 fw-bold">
+    Total Volume Delivered: <span id="total-volume">{{ '%.2f' | format(total_volume) }}</span>
+  </div>
 
-</div>
-<div style="margin-top: 1em; font-weight: bold;">
-    Total Volume Delivered: {{ '%.2f' | format(total_volume) }}
-</div>
+  <!-- Scripts -->
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.colVis.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-<!-- jQuery -->
-<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-
-<!-- DataTables JS -->
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.colVis.min.js"></script>
-
-<!-- JSZip & pdfmake for exporting -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
-
-<!-- Select2 JS -->
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
-<script>
+  <script>
     $(document).ready(function () {
-        // Initialize Select2
-        $('.filter-select').select2({
-            placeholder: 'Select options',
-            allowClear: true,
-            width: 'resolve'
-        });
+      // Select2
+      $('.filter-select').select2({
+        placeholder: 'Select options',
+        allowClear: true,
+        width: '100%'
+      });
 
-        $('.filter-select, #start_date, #end_date').on('change', function () {
-            $('.filter-form').submit();
-        });
+      $('.filter-select, #start_date, #end_date').on('change', function () {
+        $('.filter-form').submit();
+      });
 
-        // Get filename based on date
-        const getExportFilename = () => {
-            const start = $('#start_date').val() || 'start';
-            const end = $('#end_date').val() || 'end';
-            return `transactions_${start}_to_${end}`;
-        };
+      const getExportFilename = () => {
+        const start = $('#start_date').val() || 'start';
+        const end = $('#end_date').val() || 'end';
+        return `transactions_${start}_to_${end}`;
+      };
 
-        const columnNames = $('#transactions-table').data('column-names') || [];
-        console.log("Column names:", columnNames);
-        const volumeIndex = columnNames.findIndex(name =>
-            name.toLowerCase().replace(/[^a-z]/g, '') === 'volumedelivered'
+      const columnNames = $('#transactions-table').data('column-names') || [];
+      const volumeIndex = columnNames.findIndex(name => name.toLowerCase().replace(/[^a-z]/g, '') === 'volumedelivered');
 
-        );
-
-        // Setup DataTable
-        const table = $('#transactions-table').DataTable({
-            dom: '<"top-container"<"top-search"f><"top-buttons"B>>rt<"bottom"lip><"clear">',
-            buttons: [
-                {
-                    extend: 'copyHtml5',
-                    exportOptions: { columns: ':visible' },
-                    filename: getExportFilename
-                },
-                {
-                    extend: 'csvHtml5',
-                    exportOptions: { columns: ':visible' },
-                    filename: getExportFilename
-                },
-                {
-                    extend: 'excelHtml5',
-                    exportOptions: { columns: ':visible' },
-                    filename: getExportFilename
-                },
-                {
-                    extend: 'pdfHtml5',
-                    exportOptions: { columns: ':visible' },
-                    filename: getExportFilename
-                },
-                {
-                    extend: 'print',
-                    exportOptions: { columns: ':visible' }
-                },
-                'colvis'
-            ],
-            paging: true,
-            pageLength: 25,
-            lengthMenu: [10, 25, 50, 100],
-            scrollX: true,
-            stateSave: true,
-            drawCallback: function () {
-                updateTotalVolume();
-            }
-        });
-
-        function updateTotalVolume() {
-            if (volumeIndex === -1) {
-                $('#total-volume').text('Column not found');
-                return;
-            }
-
-            let total = 0;
-            table.rows({ search: 'applied' }).every(function () {
-                const data = this.data();
-                const rawValue = data[volumeIndex];
-                const num = parseFloat(String(rawValue).replace(/[^0-9.\-]+/g, ''));
-                if (!isNaN(num)) {
-                    total += num;
-                }
-            });
-
-            $('#total-volume').text(
-                total.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                })
-            );
+      const table = $('#transactions-table').DataTable({
+        dom: '<"top-container"<"top-search"f><"top-buttons"B>>rt<"bottom"lip>',
+        buttons: [
+          { extend: 'copyHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+          { extend: 'csvHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+          { extend: 'excelHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+          { extend: 'pdfHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+          { extend: 'print', exportOptions: { columns: ':visible' } },
+          'colvis'
+        ],
+        paging: true,
+        pageLength: 25,
+        lengthMenu: [10, 25, 50, 100],
+        scrollX: true,
+        stateSave: true,
+        drawCallback: function () {
+          updateTotalVolume();
         }
+      });
 
-        updateTotalVolume();
+      function updateTotalVolume() {
+        if (volumeIndex === -1) return;
+        let total = 0;
+        table.rows({ search: 'applied' }).every(function () {
+          const val = parseFloat(String(this.data()[volumeIndex]).replace(/[^0-9.\-]+/g, ''));
+          if (!isNaN(val)) total += val;
+        });
+        $('#total-volume').text(total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+      }
+
+      updateTotalVolume();
     });
-</script>
-
+  </script>
 </body>
 </html>

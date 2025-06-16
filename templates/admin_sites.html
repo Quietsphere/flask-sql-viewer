@@ -2,64 +2,200 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Admin - Site Management</title>
+    <title>Admin - Sites and Assets</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/rowgroup/1.3.1/css/rowGroup.dataTables.min.css">
+    <style>
+        td, th {
+            vertical-align: middle !important;
+        }
+    </style>
 </head>
-<body>
-<nav>
-    <a href="/">Dashboard</a>
-    <a href="/transactions">Transactions</a>
-    <a href="/tanklevels">Tank Levels</a>
-    <a href="/admin/users">User Management</a>
-    <a href="/admin/sites">Site Management</a>
-    <a href="/logout">Logout</a>
+<body class="container py-4">
+
+<nav class="mb-4">
+    <a href="/" class="btn btn-secondary me-2">Dashboard</a>
+    <a href="/transactions" class="btn btn-secondary me-2">Transactions</a>
+    <a href="/tanklevels" class="btn btn-secondary me-2">Tank Levels</a>
+    <a href="/admin/users" class="btn btn-secondary me-2">Users</a>
+    <a href="/admin/sites" class="btn btn-primary me-2">Sites & Assets</a>
+    <a href="/logout" class="btn btn-danger">Logout</a>
 </nav>
 
-<h1>Site Management</h1>
+<h1 class="mb-4">Sites and Assets</h1>
 
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
-    <ul class="flashes">
-      {% for category, message in messages %}
-        <li class="flash {{ category }}">{{ message }}</li>
-      {% endfor %}
-    </ul>
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
   {% endif %}
 {% endwith %}
 
-<h2>All Sites</h2>
-<table>
-    <thead>
-        <tr><th>Site Name</th><th>Actions</th></tr>
-    </thead>
-    <tbody>
-        {% for site in sites %}
-        <tr>
-            <td>{{ site.SiteName }}</td>
-            <td>
-                <form method="post" action="{{ url_for('admin_sites') }}" style="display:inline;">
-                    <input type="hidden" name="form_type" value="edit_site">
-                    <input type="hidden" name="site_id" value="{{ site.SiteID }}">
-                    <input type="text" name="site_name" value="{{ site.SiteName }}" required>
-                    <button type="submit">Update</button>
-                </form>
-                <form method="post" action="{{ url_for('admin_sites') }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this site?');">
-                    <input type="hidden" name="form_type" value="delete_site">
-                    <input type="hidden" name="site_id" value="{{ site.SiteID }}">
-                    <button type="submit">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
+<!-- SITES TABLE -->
+<h2>Sites</h2>
+<table class="table table-bordered mb-4" id="sites-table">
+  <thead class="table-light">
+    <tr>
+      <th>Site Name</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for site in sites %}
+    <tr>
+      <td>
+        <form method="post" action="{{ url_for('admin_sites') }}" class="d-flex align-items-center">
+          <input type="hidden" name="form_type" value="edit_site">
+          <input type="hidden" name="edit_site_id" value="{{ site.SiteID }}">
+          <input type="text" name="edit_site_name" value="{{ site.SiteName }}" class="form-control me-2" required>
+          <button type="submit" class="btn btn-sm btn-primary me-1">Update</button>
+        </form>
+      </td>
+      <td>
+        <form method="post" action="{{ url_for('admin_sites') }}" onsubmit="return confirm('Delete this site?');">
+          <input type="hidden" name="form_type" value="delete_site">
+          <input type="hidden" name="delete_site_id" value="{{ site.SiteID }}">
+          <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
 
+<!-- NEW SITE -->
 <h2>Add Site</h2>
-<form method="post" action="{{ url_for('admin_sites') }}">
+<form method="post" action="{{ url_for('admin_sites') }}" class="row g-2 mb-4">
     <input type="hidden" name="form_type" value="create_site">
-    <label>Site Name: <input type="text" name="site_name" required></label>
-    <button type="submit">Create Site</button>
+    <div class="col-auto">
+        <input type="text" name="site_name" placeholder="Site Name" required class="form-control">
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-success">Create Site</button>
+    </div>
 </form>
+
+<!-- FILTER -->
+<h2>Assets</h2>
+<div class="mb-3">
+    <label for="siteFilter" class="form-label">Filter by Site:</label>
+    <select id="siteFilter" class="form-select" style="max-width: 300px;">
+        <option value="">All Sites</option>
+        <option value="Unassigned">Unassigned Only</option>
+        {% for site in sites %}
+        <option value="{{ site.SiteName }}">{{ site.SiteName }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- ASSETS TABLE -->
+<table id="assets-table" class="table table-striped table-bordered">
+  <thead class="table-light">
+    <tr>
+      <th>Asset Name</th>
+      <th>Local Name</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th style="display:none;">Site Group</th>
+      <th>Site</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for asset in assets %}
+    <tr>
+      <td>{{ asset.AssetName }}</td>
+      <td>{{ asset.LocalName }}</td>
+      <td>{{ asset.AssetType }}</td>
+      <td>{{ asset.Description }}</td>
+      <td style="display:none;">{{ asset.SiteName or 'Unassigned' }}</td>
+      <td>{{ asset.SiteName or 'Unassigned' }}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editAssetModal{{ asset.AssetID }}">
+          Edit
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<!-- MODALS RENDERED BELOW -->
+{% for asset in assets %}
+<div class="modal fade" id="editAssetModal{{ asset.AssetID }}" tabindex="-1" aria-labelledby="editAssetLabel{{ asset.AssetID }}" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('admin_sites') }}">
+        <input type="hidden" name="form_type" value="update_asset_details">
+        <input type="hidden" name="asset_id" value="{{ asset.AssetID }}">
+        <div class="modal-header">
+          <h5 class="modal-title" id="editAssetLabel{{ asset.AssetID }}">Edit Asset</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Local Name</label>
+            <input type="text" name="local_name" class="form-control" value="{{ asset.LocalName or '' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Asset Type</label>
+            <input type="text" name="asset_type" class="form-control" value="{{ asset.AssetType or '' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <input type="text" name="description" class="form-control" value="{{ asset.Description or '' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Site</label>
+            <select name="site_id" class="form-select">
+              <option value="">Unassigned</option>
+              {% for s in sites %}
+              <option value="{{ s.SiteID }}" {% if s.SiteID|string == asset.SiteID|string %}selected{% endif %}>{{ s.SiteName }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-success">Save Changes</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
+<!-- Scripts -->
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/rowgroup/1.3.1/js/dataTables.rowGroup.min.js"></script>
+<script>
+  $(document).ready(function () {
+    var table = $('#assets-table').DataTable({
+      order: [[4, 'asc']],
+      pageLength: 10,
+      rowGroup: {
+        dataSrc: 4
+      },
+      columnDefs: [
+        { targets: 4, visible: false },
+        { targets: 6, orderable: false }
+      ]
+    });
+
+    $('#siteFilter').on('change', function () {
+      var val = this.value;
+      table.column(4).search(val === 'Unassigned' ? '^Unassigned$' : val, true, false).draw();
+    });
+  });
+</script>
 
 </body>
 </html>
