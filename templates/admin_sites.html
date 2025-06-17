@@ -163,6 +163,17 @@
               {% endfor %}
             </select>
           </div>
+          <div class="mb-3">
+  <label for="company_name_{{ asset.AssetID }}" class="form-label">Company (optional)</label>
+  <input list="company_list" name="company_name" id="company_name_{{ asset.AssetID }}" class="form-control" value="{{ asset.CompanyName or '' }}">
+</div>
+
+<datalist id="company_list">
+  {% for name in company_names %}
+    <option value="{{ name }}">
+  {% endfor %}
+</datalist>
+
         </div>
         <div class="modal-footer">
           <button type="submit" class="btn btn-success">Save Changes</button>

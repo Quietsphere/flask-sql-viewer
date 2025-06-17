@@ -2,7 +2,7 @@ import os
 from flask import (
     Flask, render_template, request, session, redirect, url_for, flash
 )
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, bindparam
 import pandas as pd
 from datetime import datetime, date, timedelta
 from dateutil.relativedelta import relativedelta
@@ -119,7 +119,7 @@ def login():
 
         with engine.connect() as conn:
             user_row = conn.execute(
-                text("SELECT UserID, Email, PasswordHash, IsAdmin FROM Users WHERE Email = :email"),
+                text("SELECT UserID, Email, PasswordHash, IsAdmin, CompanyName FROM Users WHERE Email = :email"),
                 {"email": email}
             ).fetchone()
 
@@ -127,6 +127,7 @@ def login():
             session["user_id"] = user_row.UserID
             session["email"] = user_row.Email
             session["is_admin"] = user_row.IsAdmin
+            session["company_name"] = user_row.CompanyName or ""
             flash("Logged in successfully!", "success")
             return redirect(url_for("dashboard"))
         else:
@@ -160,20 +161,66 @@ def transactions():
         selected_start = datetime(today.year, today.month, 1) + relativedelta(months=month_offset)
         selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
 
-    base_query = "FROM Transactions WHERE [TransactionEndTime] BETWEEN :start AND :end"
     params = {"start": selected_start, "end": selected_end}
+    base_query = "FROM Transactions WHERE [TransactionEndTime] BETWEEN :start AND :end"
     query_parts = []
 
-    def add_multiselect_filter(column_name, param_name=None):
-        values = request.args.getlist(param_name or column_name)
+    # --- User access control ---
+    user_id = session["user_id"]
+    company_name = session.get("company_name")
+    access = get_user_site_access(user_id)
+
+    full_site_ids = [a.SiteID for a in access if a.HasFullAccess]
+    limited_site_ids = [a.SiteID for a in access if not a.HasFullAccess]
+
+    with engine.connect() as conn:
+        full_station_ids = []
+        limited_station_ids = []
+
+        if full_site_ids:
+            result = conn.execute(text("""
+                SELECT AssetName FROM Assets
+                WHERE SiteID IN :site_ids AND AssetType = 'Station'
+            """).bindparams(bindparam("site_ids", expanding=True)), {"site_ids": limited_site_ids})
+            full_station_ids = [row[0] for row in result.fetchall()]
+
+        if limited_site_ids and company_name:
+            result = conn.execute(text("""
+                SELECT AssetName FROM Assets
+                WHERE SiteID IN :site_ids AND AssetType = 'Station'
+            """).bindparams(bindparam("site_ids", expanding=True)), {"site_ids": limited_site_ids})
+            limited_station_ids = [row[0] for row in result.fetchall()]
+
+    # Apply access control filters
+    station_filter_clauses = []
+    if full_station_ids:
+        placeholders = [f":fs_{i}" for i in range(len(full_station_ids))]
+        station_filter_clauses.append(f"StationID IN ({', '.join(placeholders)})")
+        for i, sid in enumerate(full_station_ids):
+            params[f"fs_{i}"] = sid
+
+    if limited_station_ids:
+        placeholders = [f":ls_{i}" for i in range(len(limited_station_ids))]
+        clause = f"(StationID IN ({', '.join(placeholders)}) AND CompanyName = :company_name)"
+        station_filter_clauses.append(clause)
+        for i, sid in enumerate(limited_station_ids):
+            params[f"ls_{i}"] = sid
+        params["company_name"] = company_name
+
+    if station_filter_clauses:
+        query_parts.append("(" + " OR ".join(station_filter_clauses) + ")")
+
+    # --- Multi-select filters ---
+    def add_multiselect_filter(column_name):
+        values = request.args.getlist(column_name)
         if values:
             placeholders = [f":{column_name}_{i}" for i in range(len(values))]
             query_parts.append(f"[{column_name}] IN ({', '.join(placeholders)})")
             for i, v in enumerate(values):
                 params[f"{column_name}_{i}"] = v
 
-    for column in ["StationID", "TransactionType", "DriverName", "CompanyName", "TruckID", "Product", "TankID"]:
-        add_multiselect_filter(column)
+    for col in ["TransactionType", "DriverName", "CompanyName", "TruckID", "Product", "TankID"]:
+        add_multiselect_filter(col)
 
     filter_clause = " AND " + " AND ".join(query_parts) if query_parts else ""
 
@@ -187,11 +234,13 @@ def transactions():
     total_volume = round(total_volume, 2)
     date_range = f"{selected_start.strftime('%b %d, %Y')} – {selected_end.strftime('%b %d, %Y')}"
 
-    filters = {col: get_distinct_values(col) for col in ["StationID", "TransactionType", "DriverName", "CompanyName", "TruckID", "Product", "TankID"]}
+    filters = {col: get_distinct_values(col) for col in ["TransactionType", "DriverName", "CompanyName", "TruckID", "Product", "TankID"]}
 
-    return render_template("transactions.html", headers=headers, rows=rows, start=selected_start.date(),
-                           end=selected_end.date(), date_range=date_range, month_offset=month_offset,
+    return render_template("transactions.html", headers=headers, rows=rows,
+                           start=selected_start.date(), end=selected_end.date(),
+                           date_range=date_range, month_offset=month_offset,
                            filters=filters, total_volume=total_volume)
+
 
 @app.route("/tanklevels")
 @login_required
@@ -213,118 +262,68 @@ def tanklevels():
         selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
 
     start, end = selected_start.strftime("%Y-%m-%d %H:%M:%S"), selected_end.strftime("%Y-%m-%d %H:%M:%S")
-    tank = request.args.get("tank")
-
-    query = "SELECT * FROM TankLevels WHERE [ReadingTimestamp] BETWEEN :start AND :end"
+    tank_filter = request.args.get("tank")
     params = {"start": start, "end": end}
-    if tank:
-        query += " AND TankName LIKE :tank"
-        params["tank"] = f"%{tank}%"
-    query += " ORDER BY [ReadingTimestamp] DESC"
+    where_clauses = ["[ReadingTimestamp] BETWEEN :start AND :end"]
+
+    # --- Access Filtering ---
+    user_id = session["user_id"]
+    is_admin = session.get("is_admin", False)
+    user_company = session.get("company_name")
+
+    visible_tank_ids = []
+
+    if not is_admin:
+        access = get_user_site_access(user_id)
+        full_sites = [a.SiteID for a in access if a.HasFullAccess]
+        limited_sites = [a.SiteID for a in access if not a.HasFullAccess]
+
+        with engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT AssetName, SiteID, CompanyName
+                FROM Assets
+                WHERE AssetType = 'Tank'
+            """))
+            for row in result:
+                asset_name = row.AssetName
+                site_id = row.SiteID
+                tank_company = row.CompanyName
+
+                if site_id in full_sites:
+                    visible_tank_ids.append(asset_name)
+                elif site_id in limited_sites and tank_company and tank_company == user_company:
+                    visible_tank_ids.append(asset_name)
+
+        if visible_tank_ids:
+            placeholders = [f":tank_{i}" for i in range(len(visible_tank_ids))]
+            where_clauses.append(f"TankID IN ({', '.join(placeholders)})")
+            for i, tank_id in enumerate(visible_tank_ids):
+                params[f"tank_{i}"] = tank_id
+        else:
+            # Block access if no valid tanks
+            return render_template("tanklevels.html", headers=[], rows=[],
+                                   start=selected_start.date(), end=selected_end.date(),
+                                   month_offset=month_offset,
+                                   date_range=f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}")
+
+    # Optional name filter
+    if tank_filter:
+        where_clauses.append("TankName LIKE :tank")
+        params["tank"] = f"%{tank_filter}%"
+
+    query = f"""
+        SELECT * FROM TankLevels
+        WHERE {' AND '.join(where_clauses)}
+        ORDER BY [ReadingTimestamp] DESC
+    """
 
     headers, rows = get_data(query, params)
-    date_range_str = f"{selected_start.strftime('%b %d, %Y')} - {selected_end.strftime('%b %d, %Y')}"
+    date_range_str = f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}"
+
     return render_template("tanklevels.html", headers=headers, rows=rows,
                            start=selected_start.date(), end=selected_end.date(),
                            month_offset=month_offset, date_range=date_range_str)
 
-
-@app.route("/admin", methods=["GET", "POST"])
-@admin_required
-def admin_panel():
-    print("Form data:", request.form)
-
-    message_handled = False
-
-    # --- Create new user ---
-    if "new_user_email" in request.form:
-        email = request.form["new_user_email"].strip().lower()
-        password = request.form["new_user_password"]
-        is_admin = bool(request.form.get("new_user_is_admin"))
-
-        with engine.connect() as conn:
-            existing = conn.execute(
-                text("SELECT 1 FROM Users WHERE LOWER(Email) = :email"),
-                {"email": email}
-            ).fetchone()
-
-        if existing:
-            flash("A user with that email already exists.", "warning")
-        else:
-            password_hash = generate_password_hash(password)
-            try:
-                with engine.begin() as conn:
-                    conn.execute(text("""
-                        INSERT INTO Users (Email, PasswordHash, IsAdmin)
-                        VALUES (:email, :password_hash, :is_admin)
-                    """), {
-                        "email": email,
-                        "password_hash": password_hash,
-                        "is_admin": int(is_admin)
-                    })
-                flash("User created successfully.", "success")
-            except Exception as e:
-                flash(f"Error creating user: {e}", "danger")
-        message_handled = True
-
-    # --- Create new site ---
-    elif request.form.get("form_type") == "create_site":
-        site_name = request.form.get("new_site_name", "").strip()
-        if site_name:
-            try:
-                with engine.begin() as conn:
-                    conn.execute(text("""
-                        INSERT INTO Sites (SiteName) VALUES (:site_name)
-                    """), {"site_name": site_name})
-                flash("Site created successfully.", "success")
-            except Exception as e:
-                flash(f"Error creating site: {e}", "danger")
-        else:
-            flash("Site name cannot be empty.", "warning")
-        return redirect(url_for("admin_sites"))  # <-- this is required
-
-
-
-    # --- Edit site ---
-    elif "edit_site_id" in request.form:
-        site_id = request.form["edit_site_id"]
-        site_name = request.form["edit_site_name"].strip()
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("""
-                    UPDATE Sites SET SiteName = :site_name WHERE SiteID = :site_id
-                """), {"site_name": site_name, "site_id": site_id})
-            flash("Site updated successfully.", "success")
-        except Exception as e:
-            flash(f"Error updating site: {e}", "danger")
-        message_handled = True
-
-    # --- Delete site ---
-    elif "delete_site_id" in request.form:
-        site_id = request.form["delete_site_id"]
-        try:
-            with engine.begin() as conn:
-                conn.execute(text("DELETE FROM Sites WHERE SiteID = :site_id"), {"site_id": site_id})
-            flash("Site deleted.", "info")
-        except Exception as e:
-            flash(f"Error deleting site: {e}", "danger")
-        message_handled = True
-
-    # --- Fetch data for display ---
-    with engine.connect() as conn:
-        users = conn.execute(text("SELECT UserID, Email, IsAdmin FROM Users ORDER BY Email")).fetchall()
-        sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
-        assignments = conn.execute(text("""
-            SELECT u.Email, s.SiteName
-            FROM UserSiteAccess usa
-            JOIN Users u ON usa.UserID = u.UserID
-            JOIN Sites s ON usa.SiteID = s.SiteID
-            ORDER BY u.Email, s.SiteName
-        """)).fetchall()
-
-    ret# Add to app.py
-
-# Add to app.py
 
 @app.route("/admin/users", methods=["GET", "POST"])
 @admin_required
@@ -337,6 +336,7 @@ def admin_users():
             email = request.form["email"].strip().lower()
             password = request.form["password"]
             is_admin = bool(request.form.get("is_admin"))
+            company_name = request.form.get("company_name", "").strip() or None
 
             with engine.connect() as conn:
                 existing = conn.execute(
@@ -350,13 +350,14 @@ def admin_users():
                 password_hash = generate_password_hash(password)
                 with engine.begin() as conn:
                     conn.execute(text("""
-                        INSERT INTO Users (UserName, Email, PasswordHash, IsAdmin)
-                        VALUES (:user_name, :email, :password_hash, :is_admin)
+                        INSERT INTO Users (UserName, Email, PasswordHash, IsAdmin, CompanyName)
+                        VALUES (:user_name, :email, :password_hash, :is_admin, :company_name)
                     """), {
                         "user_name": user_name,
                         "email": email,
                         "password_hash": password_hash,
-                        "is_admin": int(is_admin)
+                        "is_admin": int(is_admin),
+                        "company_name": company_name
                     })
                 flash("User created successfully.", "success")
 
@@ -365,18 +366,20 @@ def admin_users():
             email = request.form["email"].strip().lower()
             is_admin = bool(request.form.get("is_admin"))
             user_name = request.form.get("user_name", "").strip()
+            company_name = request.form.get("company_name", "").strip() or None
 
             # Save user info
             with engine.begin() as conn:
                 conn.execute(text("""
                     UPDATE Users
-                    SET Email = :email, IsAdmin = :is_admin, UserName =:user_name
+                    SET Email = :email, IsAdmin = :is_admin, UserName = :user_name, CompanyName = :company_name
                     WHERE UserID = :user_id
                 """), {
                     "email": email,
                     "is_admin": int(is_admin),
                     "user_name": user_name,
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "company_name": company_name
                 })
 
                 # Remove old site assignments
@@ -432,7 +435,7 @@ def admin_users():
                     flash("Site access assigned successfully.", "success")
 
     with engine.connect() as conn:
-        users = conn.execute(text("SELECT UserID, Email, UserName, IsAdmin FROM Users ORDER BY UserName")).fetchall()
+        users = conn.execute(text("SELECT UserID, Email, UserName, IsAdmin, CompanyName FROM Users ORDER BY UserName")).fetchall()
         assignments = conn.execute(text("""
             SELECT usa.UserID, u.Email, s.SiteName, usa.SiteID, usa.HasFullAccess, u.UserName
             FROM UserSiteAccess usa
@@ -440,9 +443,18 @@ def admin_users():
             JOIN Sites s ON usa.SiteID = s.SiteID
             ORDER BY u.UserName, s.SiteName
         """)).fetchall()
+
+        company_rows = conn.execute(text("""
+            SELECT DISTINCT CompanyName FROM Users WHERE CompanyName IS NOT NULL
+            UNION
+            SELECT DISTINCT CompanyName FROM Transactions WHERE CompanyName IS NOT NULL
+        """)).fetchall()
+        company_names = sorted(set(r[0] for r in company_rows if r[0]))
+
         sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
 
-    return render_template("admin_users.html", users=users, assignments=assignments, sites=sites)
+    return render_template("admin_users.html", users=users, assignments=assignments, sites=sites, company_names=company_names)
+
 
 
 
@@ -508,6 +520,8 @@ def admin_sites():
             asset_type = request.form.get("asset_type", "").strip()
             description = request.form.get("description", "").strip()
             site_id = request.form.get("site_id") or None
+            company_name = request.form.get("company_name", "").strip() or None
+
 
             with engine.begin() as conn:
                 conn.execute(text("""
@@ -515,29 +529,39 @@ def admin_sites():
                     SET LocalName = :local_name,
                         AssetType = :asset_type,
                         Description = :description,
-                        SiteID = :site_id
+                        SiteID = :site_id,
+                        CompanyName = :company_name
                     WHERE AssetID = :asset_id
                 """), {
                     "local_name": local_name,
                     "asset_type": asset_type,
                     "description": description,
                     "site_id": site_id,
+                    "company_name": company_name,
                     "asset_id": asset_id
                 })
             flash("Asset updated successfully.", "success")
             return redirect(url_for("admin_sites"))
 
-    # On GET or after POST actions, fetch updated data
+# Fetch distinct companies from Users and Transactions
     with engine.connect() as conn:
         sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
         assets = conn.execute(text("""
-            SELECT a.AssetID, a.AssetName, a.LocalName, a.AssetType, a.Description, a.SiteID, s.SiteName
+            SELECT a.AssetID, a.AssetName, a.LocalName, a.AssetType, a.Description, a.SiteID, s.SiteName, a.CompanyName
             FROM Assets a
             LEFT JOIN Sites s ON a.SiteID = s.SiteID
             ORDER BY a.AssetName
         """)).fetchall()
 
-    return render_template("admin_sites.html", sites=sites, assets=assets)
+        company_rows = conn.execute(text("""
+            SELECT DISTINCT CompanyName FROM Users WHERE CompanyName IS NOT NULL
+            UNION
+            SELECT DISTINCT CompanyName FROM Transactions WHERE CompanyName IS NOT NULL
+        """)).fetchall()
+        company_names = sorted(set(r[0] for r in company_rows if r[0]))
+
+
+    return render_template("admin_sites.html", sites=sites, assets=assets, company_names=company_names)
 
 
 

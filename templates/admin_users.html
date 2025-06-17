@@ -42,6 +42,7 @@
         <tr>
             <th>Name</th>
             <th>Email</th>
+            <th>Company</th>
             <th>Is Admin</th>
             <th>Sites</th>
             <th>Actions</th>
@@ -52,6 +53,7 @@
         <tr>
             <td>{{ user.UserName }}</td>
             <td>{{ user.Email }}</td>
+            <td>{{ user.CompanyName }}</td>
             <td>{{ "Yes" if user.IsAdmin else "No" }}</td>
             <td>
                 {% for a in assignments if a.Email == user.Email %}
@@ -90,6 +92,11 @@
             <label for="email{{ user.UserID }}" class="form-label">Email</label>
             <input type="email" class="form-control" name="email" id="email{{ user.UserID }}" value="{{ user.Email }}" required>
           </div>
+                      <div class="mb-3">
+  <label for="company_name{{ user.UserID }}" class="form-label">Company</label>
+  <input type="text" name="company_name" id="company_name{{ user.UserID }}" class="form-control"
+         list="company_list" value="{{ user.CompanyName or '' }}">
+</div>
           <div class="form-check mb-3">
             <input type="checkbox" class="form-check-input" name="is_admin" id="is_admin{{ user.UserID }}" value="1" {% if user.IsAdmin %}checked{% endif %}>
             <label class="form-check-label" for="is_admin{{ user.UserID }}">Admin</label>
@@ -114,6 +121,8 @@
                 </div>
               </div>
             </div>
+
+
           {% endfor %}
         </div>
         <div class="modal-footer">
@@ -155,11 +164,22 @@
             <label class="form-check-label" for="is_admin">Admin</label>
         </div>
     </div>
+    <div class="col-md-4">
+  <label for="company_name" class="form-label">Company</label>
+  <input type="text" name="company_name" id="company_name" class="form-control" list="company_list">
+</div>
+
     <div class="col-md-2 d-flex align-items-end">
         <button type="submit" class="btn btn-success">Add User</button>
     </div>
 </form>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<datalist id="company_list">
+  {% for name in company_names %}
+    <option value="{{ name }}">
+  {% endfor %}
+</datalist>
+
 </body>
 </html>
