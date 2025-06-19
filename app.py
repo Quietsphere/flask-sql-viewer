@@ -5,6 +5,7 @@ from flask import (
 from sqlalchemy import create_engine, text, bindparam
 import pandas as pd
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import secrets
@@ -49,7 +50,8 @@ def get_date_range(request_args):
 
 def get_data(query, params=None):
     df = pd.read_sql(text(query), engine, params=params)
-    return list(df.columns), df.values.tolist()
+    return list(df.columns), df.to_dict(orient="records")  # ✅ return list of dicts
+
 
 def get_distinct_values(column):
     query = text(f"SELECT DISTINCT [{column}] FROM Transactions ORDER BY [{column}]")
@@ -129,11 +131,23 @@ def login():
             session["is_admin"] = user_row.IsAdmin
             session["company_name"] = user_row.CompanyName or ""
             flash("Logged in successfully!", "success")
+
+            central_time = datetime.now(ZoneInfo("America/Chicago"))
+
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    UPDATE Users SET LastLogin = :login_time WHERE UserID = :user_id
+                """), {
+                    "login_time": central_time,
+                    "user_id": user_row.UserID
+                })
+
             return redirect(url_for("dashboard"))
         else:
             flash("Invalid email or password.", "danger")
 
     return render_template("login.html")
+
 
 @app.route("/logout")
 @login_required
@@ -162,10 +176,8 @@ def transactions():
         selected_end = selected_start + relativedelta(months=1) - timedelta(seconds=1)
 
     params = {"start": selected_start, "end": selected_end}
-    base_query = "FROM Transactions WHERE [TransactionEndTime] BETWEEN :start AND :end"
     query_parts = []
 
-    # --- User access control ---
     user_id = session["user_id"]
     company_name = session.get("company_name")
     access = get_user_site_access(user_id)
@@ -178,30 +190,31 @@ def transactions():
         limited_station_ids = []
 
         if full_site_ids:
-            result = conn.execute(text("""
-                SELECT AssetName FROM Assets
-                WHERE SiteID IN :site_ids AND AssetType = 'Station'
-            """).bindparams(bindparam("site_ids", expanding=True)), {"site_ids": limited_site_ids})
+            result = conn.execute(
+                text("SELECT AssetName FROM Assets WHERE SiteID IN :site_ids AND AssetType = 'Station'")
+                .bindparams(bindparam("site_ids", expanding=True)),
+                {"site_ids": full_site_ids}
+            )
             full_station_ids = [row[0] for row in result.fetchall()]
 
         if limited_site_ids and company_name:
-            result = conn.execute(text("""
-                SELECT AssetName FROM Assets
-                WHERE SiteID IN :site_ids AND AssetType = 'Station'
-            """).bindparams(bindparam("site_ids", expanding=True)), {"site_ids": limited_site_ids})
+            result = conn.execute(
+                text("SELECT AssetName FROM Assets WHERE SiteID IN :site_ids AND AssetType = 'Station'")
+                .bindparams(bindparam("site_ids", expanding=True)),
+                {"site_ids": limited_site_ids}
+            )
             limited_station_ids = [row[0] for row in result.fetchall()]
 
-    # Apply access control filters
     station_filter_clauses = []
     if full_station_ids:
         placeholders = [f":fs_{i}" for i in range(len(full_station_ids))]
-        station_filter_clauses.append(f"StationID IN ({', '.join(placeholders)})")
+        station_filter_clauses.append(f"t.StationID IN ({', '.join(placeholders)})")
         for i, sid in enumerate(full_station_ids):
             params[f"fs_{i}"] = sid
 
     if limited_station_ids:
         placeholders = [f":ls_{i}" for i in range(len(limited_station_ids))]
-        clause = f"(StationID IN ({', '.join(placeholders)}) AND CompanyName = :company_name)"
+        clause = f"(t.StationID IN ({', '.join(placeholders)}) AND t.CompanyName = :company_name)"
         station_filter_clauses.append(clause)
         for i, sid in enumerate(limited_station_ids):
             params[f"ls_{i}"] = sid
@@ -210,36 +223,97 @@ def transactions():
     if station_filter_clauses:
         query_parts.append("(" + " OR ".join(station_filter_clauses) + ")")
 
-    # --- Multi-select filters ---
     def add_multiselect_filter(column_name):
         values = request.args.getlist(column_name)
         if values:
             placeholders = [f":{column_name}_{i}" for i in range(len(values))]
-            query_parts.append(f"[{column_name}] IN ({', '.join(placeholders)})")
+            query_parts.append(f"t.[{column_name}] IN ({', '.join(placeholders)})")
             for i, v in enumerate(values):
                 params[f"{column_name}_{i}"] = v
 
-    for col in ["TransactionType", "DriverName", "CompanyName", "TruckID", "Product", "TankID"]:
+    for col in ["TransactionType", "DriverName", "CompanyName", "TruckID", "Product"]:
         add_multiselect_filter(col)
+
+    # Custom handling for Station and Site filters
+    station_values = request.args.getlist("Station")
+    if station_values:
+        placeholders = [f":station_{i}" for i in range(len(station_values))]
+        query_parts.append(f"a.LocalName IN ({', '.join(placeholders)})")
+        for i, val in enumerate(station_values):
+            params[f"station_{i}"] = val
+
+    site_values = request.args.getlist("Site")
+    if site_values:
+        placeholders = [f":site_{i}" for i in range(len(site_values))]
+        query_parts.append(f"s.SiteName IN ({', '.join(placeholders)})")
+        for i, val in enumerate(site_values):
+            params[f"site_{i}"] = val
 
     filter_clause = " AND " + " AND ".join(query_parts) if query_parts else ""
 
-    data_query = f"SELECT * {base_query}{filter_clause} ORDER BY [TransactionEndTime] DESC"
+    base_query = f"""
+        FROM Transactions t
+        JOIN Assets a ON t.StationID = a.AssetName
+        JOIN Sites s ON a.SiteID = s.SiteID
+        WHERE t.[TransactionEndTime] BETWEEN :start AND :end
+        {filter_clause}
+    """
+
+    data_query = f"""
+        SELECT 
+            t.ID AS TransactionID,
+            a.LocalName AS Station,
+            s.SiteName AS Site,
+            t.TransactionType,
+            t.VolumeDelivered,
+            t.TransactionStartTime,
+            t.TransactionEndTime,
+            t.DriverName,
+            t.CompanyName,
+            t.TruckID,
+            t.Product
+        {base_query}
+        ORDER BY t.[TransactionEndTime] DESC
+    """
+
     headers, rows = get_data(data_query, params)
 
-    sum_query = f"SELECT SUM(VolumeDelivered) as TotalVolume {base_query}{filter_clause}"
+    sum_query = f"SELECT SUM(t.VolumeDelivered) as TotalVolume {base_query}"
     with engine.connect() as conn:
         total_volume = conn.execute(text(sum_query), params).scalar() or 0
 
     total_volume = round(total_volume, 2)
-    date_range = f"{selected_start.strftime('%b %d, %Y')} – {selected_end.strftime('%b %d, %Y')}"
+    date_range = f"{selected_start.strftime('%b %d, %Y')} - {selected_end.strftime('%b %d, %Y')}"
 
-    filters = {col: get_distinct_values(col) for col in ["TransactionType", "DriverName", "CompanyName", "TruckID", "Product", "TankID"]}
+    filters = {}
+    for col in ["TransactionType", "DriverName", "CompanyName", "TruckID", "Product"]:
+        filters[col] = get_distinct_values(col)
+
+    with engine.connect() as conn:
+        station_rows = conn.execute(text("""
+            SELECT DISTINCT a.LocalName
+            FROM Transactions t
+            JOIN Assets a ON t.StationID = a.AssetName
+            WHERE a.AssetType = 'Station'
+            ORDER BY a.LocalName
+        """)).fetchall()
+        filters["Station"] = [row[0] for row in station_rows]
+
+        site_rows = conn.execute(text("""
+            SELECT DISTINCT s.SiteName
+            FROM Transactions t
+            JOIN Assets a ON t.StationID = a.AssetName
+            JOIN Sites s ON a.SiteID = s.SiteID
+            ORDER BY s.SiteName
+        """)).fetchall()
+        filters["Site"] = [row[0] for row in site_rows]
 
     return render_template("transactions.html", headers=headers, rows=rows,
                            start=selected_start.date(), end=selected_end.date(),
                            date_range=date_range, month_offset=month_offset,
                            filters=filters, total_volume=total_volume)
+
+
 
 
 @app.route("/tanklevels")
@@ -270,7 +344,6 @@ def tanklevels():
     user_id = session["user_id"]
     is_admin = session.get("is_admin", False)
     user_company = session.get("company_name")
-
     visible_tank_ids = []
 
     if not is_admin:
@@ -280,7 +353,7 @@ def tanklevels():
 
         with engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT AssetName, SiteID, CompanyName
+                SELECT AssetName, SiteID, CompanyName, Capacity
                 FROM Assets
                 WHERE AssetType = 'Tank'
             """))
@@ -300,30 +373,104 @@ def tanklevels():
             for i, tank_id in enumerate(visible_tank_ids):
                 params[f"tank_{i}"] = tank_id
         else:
-            # Block access if no valid tanks
             return render_template("tanklevels.html", headers=[], rows=[],
                                    start=selected_start.date(), end=selected_end.date(),
                                    month_offset=month_offset,
-                                   date_range=f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}")
+                                   date_range=f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}",
+                                   chart_data={}, chart_trends={})
 
-    # Optional name filter
     if tank_filter:
         where_clauses.append("TankName LIKE :tank")
         params["tank"] = f"%{tank_filter}%"
 
+    # --- Table and Line Chart Query ---
     query = f"""
-        SELECT * FROM TankLevels
+        SELECT *
+        FROM vw_TankLevelsWithName
         WHERE {' AND '.join(where_clauses)}
         ORDER BY [ReadingTimestamp] DESC
     """
-
     headers, rows = get_data(query, params)
-    date_range_str = f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}"
 
-    return render_template("tanklevels.html", headers=headers, rows=rows,
-                           start=selected_start.date(), end=selected_end.date(),
-                           month_offset=month_offset, date_range=date_range_str)
+    # Before your main code in /tanklevels route
+    with engine.connect() as conn:
+        asset_info = {
+            row.AssetName: {
+                "LocalName": row.LocalName
+            }
+            for row in conn.execute(text("SELECT AssetName, LocalName FROM Assets WHERE AssetType = 'Tank'"))
+        }
 
+
+    # --- Bar Chart Query (Most Recent Readings) ---
+    access_clauses = [clause for clause in where_clauses if not clause.startswith("[ReadingTimestamp]")]
+    access_filter = f" AND {' AND '.join(access_clauses)}" if access_clauses else ""
+
+    bar_query = f"""
+        SELECT 
+            CASE 
+                WHEN NULLIF(a.LocalName, '') IS NOT NULL THEN a.LocalName
+                ELSE tl.TankName
+            END AS Label,
+            s.SiteName,
+            tl.Volume,
+            tl.ReadingTimestamp,
+            a.Capacity
+        FROM TankLevels tl
+        JOIN Assets a ON tl.TankID = a.AssetName
+        LEFT JOIN Sites s ON a.SiteID = s.SiteID
+        WHERE tl.[ReadingTimestamp] = (
+            SELECT MAX(t2.ReadingTimestamp)
+            FROM TankLevels t2
+            WHERE t2.TankID = tl.TankID
+        )
+        {access_filter}
+    """
+
+    bar_data = []
+    with engine.connect() as conn:
+        bar_rows = conn.execute(text(bar_query), params).fetchall()
+        for row in bar_rows:
+            label = row.Label  # This already uses CASE WHEN for LocalName/TankName
+            bar_data.append({
+                "TankName": label,
+                "SiteName": row.SiteName or "Unassigned",
+                "Volume": float(row.Volume),
+                "Capacity": float(row.Capacity) if row.Capacity is not None else None,
+                "Timestamp": row.ReadingTimestamp.isoformat() if row.ReadingTimestamp else ""
+            })
+
+    # --- Line Chart Trend Data ---
+    trend_data = []
+    for row in rows:
+        tank_id = row.get("TankID")
+        fallback_tankname = row.get("TankName")
+        timestamp = row.get("ReadingTimestamp")
+        volume = row.get("Volume")
+
+        # Lookup preferred label
+        asset = asset_info.get(tank_id, {})
+        label = asset.get("LocalName")
+        label = label if label and label.strip() else fallback_tankname
+
+        if label and timestamp and volume is not None:
+            trend_data.append({
+                "TankName": label,
+                "Timestamp": timestamp.isoformat(),
+                "Volume": float(volume)
+            })
+
+    trend_data.sort(key=lambda p: (p["TankName"], p["Timestamp"]))
+
+    return render_template("tanklevels.html",
+                           headers=headers,
+                           rows=rows,
+                           start=selected_start.date(),
+                           end=selected_end.date(),
+                           month_offset=month_offset,
+                           date_range=f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}",
+                           chart_data=bar_data or [],
+                           chart_trends=trend_data or [])
 
 @app.route("/admin/users", methods=["GET", "POST"])
 @admin_required
@@ -435,7 +582,7 @@ def admin_users():
                     flash("Site access assigned successfully.", "success")
 
     with engine.connect() as conn:
-        users = conn.execute(text("SELECT UserID, Email, UserName, IsAdmin, CompanyName FROM Users ORDER BY UserName")).fetchall()
+        users = conn.execute(text("SELECT UserID, Email, UserName, IsAdmin, CompanyName, LastLogin FROM Users ORDER BY UserName")).fetchall()
         assignments = conn.execute(text("""
             SELECT usa.UserID, u.Email, s.SiteName, usa.SiteID, usa.HasFullAccess, u.UserName
             FROM UserSiteAccess usa
@@ -521,7 +668,8 @@ def admin_sites():
             description = request.form.get("description", "").strip()
             site_id = request.form.get("site_id") or None
             company_name = request.form.get("company_name", "").strip() or None
-
+            capacity_str = request.form.get("capacity", "").strip()
+            capacity = float(capacity_str) if capacity_str else None  # Convert if not blank
 
             with engine.begin() as conn:
                 conn.execute(text("""
@@ -530,7 +678,8 @@ def admin_sites():
                         AssetType = :asset_type,
                         Description = :description,
                         SiteID = :site_id,
-                        CompanyName = :company_name
+                        CompanyName = :company_name,
+                        Capacity = :capacity
                     WHERE AssetID = :asset_id
                 """), {
                     "local_name": local_name,
@@ -538,6 +687,7 @@ def admin_sites():
                     "description": description,
                     "site_id": site_id,
                     "company_name": company_name,
+                    "capacity": capacity,
                     "asset_id": asset_id
                 })
             flash("Asset updated successfully.", "success")
@@ -547,7 +697,7 @@ def admin_sites():
     with engine.connect() as conn:
         sites = conn.execute(text("SELECT SiteID, SiteName FROM Sites ORDER BY SiteName")).fetchall()
         assets = conn.execute(text("""
-            SELECT a.AssetID, a.AssetName, a.LocalName, a.AssetType, a.Description, a.SiteID, s.SiteName, a.CompanyName
+            SELECT a.AssetID, a.AssetName, a.LocalName, a.AssetType, a.Description, a.SiteID, s.SiteName, a.CompanyName, a.Capacity
             FROM Assets a
             LEFT JOIN Sites s ON a.SiteID = s.SiteID
             ORDER BY a.AssetName

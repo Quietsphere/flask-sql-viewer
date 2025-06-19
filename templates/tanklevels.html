@@ -12,6 +12,15 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.3.0/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 </head>
 <body class="container py-4">
   <!-- Navigation -->
@@ -58,83 +67,202 @@
 </form>
 
 
-  <!-- Chart -->
+  <!-- Charts -->
+
   <div class="mb-5">
-    <canvas id="levelChart" height="100"></canvas>
-  </div>
+  <h4>Current Inventory</h4>
+  <canvas id="barChart" height="100"></canvas>
+</div>
+
+<div class="mb-5">
+  <h4>Tank Volume Trends</h4>
+  <canvas id="lineChart" height="100"></canvas>
+</div>
 
   <!-- Data Table -->
   <table id="tankTable" class="table table-striped table-bordered nowrap w-100">
-    <thead class="table-light">
-      <tr>
-        {% for header in headers %}
-          <th>{{ header }}</th>
-        {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-        <tr>
-          {% for item in row %}
-            <td>{{ item }}</td>
-          {% endfor %}
-        </tr>
-      {% endfor %}
-    </tbody>
+<thead>
+  <tr>
+    <th>Tank</th>
+    <th>Site</th>
+    <th>Owner</th>
+    <th>Supplier</th>
+    <th>Product</th>
+    <th>Timestamp</th>
+    <th>Level</th>
+    <th>Volume</th>
+  </tr>
+</thead>
+<tbody>
+  {% for row in rows %}
+    <tr>
+      <td>{{ row['PreferredTankName'] }}</td>
+      <td>{{ row['Site'] }}</td>
+      <td>{{ row['Owner'] }}</td>
+      <td>{{ row['Supplier'] }}</td>
+      <td>{{ row['Product'] }}</td>
+      <td>{{ row['ReadingTimestamp'] }}</td>
+      <td>{{ row['Level'] }}</td>
+      <td>{{ row['Volume'] }}</td>
+    </tr>
+  {% endfor %}
+</tbody>
+
+
   </table>
 
   <!-- Scripts -->
-  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-  <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
-  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
-  <script>
-    $(document).ready(function () {
-      const headers = {{ headers | tojson }};
-      const rows = {{ rows | tojson }};
-      const timestampIndex = headers.indexOf("Reading Timestamp");
-      const volumeIndex = headers.indexOf("Volume");
+<script>
+  const barChartData = {{ chart_data | tojson }};
+  const lineChartData = {{ chart_trends | tojson }};
+</script>
 
-      const labels = rows.map(row => row[timestampIndex]);
-      const data = rows.map(row => row[volumeIndex]);
+<script>
+  // Register the plugin globally before any chart instance is created
+  Chart.register(ChartDataLabels);
 
-      // Chart
-      const ctx = document.getElementById('levelChart').getContext('2d');
-      new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels.reverse(),
-          datasets: [{
-            label: 'Tank Volume',
-            data: data.reverse(),
-            borderColor: 'rgb(75, 192, 192)',
-            fill: false,
-            tension: 0.1
-          }]
+document.addEventListener("DOMContentLoaded", function () {
+  // --- Line Chart ---
+  const grouped = {};
+  lineChartData.forEach(p => {
+    // Use PreferredTankName for grouping
+    const label = p.PreferredTankName || p.TankName;
+    if (!grouped[label]) grouped[label] = [];
+    grouped[label].push({ x: p.Timestamp, y: p.Volume });
+  });
+
+  const lineDatasets = Object.entries(grouped).map(([tank, data]) => ({
+    label: tank,
+    data,
+    fill: false,
+    borderWidth: 2,
+    tension: 0.3
+  }));
+
+  new Chart(document.getElementById("lineChart").getContext("2d"), {
+    type: "line",
+    data: { datasets: lineDatasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      scales: {
+        x: {
+          type: 'time',
+          time: { unit: 'day', tooltipFormat: 'MMM d, yyyy HH:mm' },
+          title: { display: true, text: "Timestamp" }
         },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: true } },
-          scales: {
-            x: { title: { display: true, text: 'Reading Timestamp' } },
-            y: { title: { display: true, text: 'Volume' } }
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: "Volume (Gal)" }
+        }
+      },
+      plugins: {
+        datalabels: {
+          anchor: 'end',
+          align: 'top',
+          font: { size: 9 },
+          formatter: function(value) {
+            return `${value.y}`;
           }
         }
-      });
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
 
-      // DataTable
-      $('#tankTable').DataTable({
-        dom: 'Bfrtip',
-        buttons: ['copyHtml5', 'excelHtml5', 'csvHtml5'],
-        scrollX: true,
-        paging: true,
-        pageLength: 25,
-        lengthMenu: [10, 25, 50, 100]
-      });
+  // --- Bar Chart ---
+  const barLabels = barChartData.map(t => t.PreferredTankName);
+  const barVolumes = barChartData.map(t => t.Volume);
+  const barEmpties = barChartData.map(t =>
+    (t.Capacity != null && t.Volume != null) ? (t.Capacity - t.Volume) : 0
+  );
+  const barTimestamps = barChartData.map(t => t.Timestamp);
+
+  new Chart(document.getElementById("barChart").getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: barLabels,
+      datasets: [
+        {
+          label: "Filled",
+          data: barVolumes,
+          backgroundColor: "rgba(54, 162, 235, 0.6)",
+          borderColor: "rgba(54, 162, 235, 1)",
+          borderWidth: 1
+        },
+        {
+          label: "Empty",
+          data: barEmpties,
+          backgroundColor: "rgba(200, 200, 200, 0.4)",
+          borderColor: "rgba(200, 200, 200, 1)",
+          borderWidth: 1
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              const tank = barChartData[context.dataIndex];
+              const ts = tank.Timestamp?.split("T")[0] || "";
+              if (context.dataset.label === "Filled") {
+                return `${tank.PreferredTankName || tank.TankName}: ${tank.Volume} gal @ ${ts}`;
+              } else {
+                return `Remaining Capacity: ${tank.Capacity - tank.Volume} gal`;
+              }
+            }
+          }
+        },
+        datalabels: {
+          anchor: 'end',
+          align: 'end',
+          font: { size: 10 },
+          formatter: function (value, context) {
+            const tank = barChartData[context.dataIndex];
+            return context.dataset.label === "Filled"
+              ? `${tank.PreferredTankName || tank.TankName}\n${value} gal`
+              : '';
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { autoSkip: false },
+          title: { display: true, text: "Tank" }
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          title: { display: true, text: "Volume (Gal)" }
+        }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+});
+
+
+
+
+</script>
+
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.querySelector('form');
+    ['#start_date', '#end_date', '#tank'].forEach(selector => {
+      const input = document.querySelector(selector);
+      if (input) {
+        input.addEventListener('change', () => {
+          form.submit();
+        });
+      }
     });
-  </script>
+  });
+</script>
 </body>
 </html>

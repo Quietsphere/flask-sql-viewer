@@ -45,6 +45,7 @@
             <th>Company</th>
             <th>Is Admin</th>
             <th>Sites</th>
+            <th>Last Login</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -60,6 +61,7 @@
                     {{ a.SiteName }}{% if not loop.last %}, {% endif %}
                 {% endfor %}
             </td>
+            <td>{{ user.LastLogin.strftime('%Y-%m-%d %H:%M:%S') if user.LastLogin else 'Never' }}</td>
             <td>
                 <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#editUserModal{{ user.UserID }}">Edit</button>
                 <form method="post" class="d-inline" onsubmit="return confirm('Delete this user?');">

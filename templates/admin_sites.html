@@ -104,6 +104,7 @@
       <th>Asset Name</th>
       <th>Local Name</th>
       <th>Type</th>
+      <th>Capacity</th>
       <th>Description</th>
       <th style="display:none;">Site Group</th>
       <th>Site</th>
@@ -116,6 +117,7 @@
       <td>{{ asset.AssetName }}</td>
       <td>{{ asset.LocalName }}</td>
       <td>{{ asset.AssetType }}</td>
+      <td>{{ asset.Capacity }}</td>
       <td>{{ asset.Description }}</td>
       <td style="display:none;">{{ asset.SiteName or 'Unassigned' }}</td>
       <td>{{ asset.SiteName or 'Unassigned' }}</td>
@@ -149,6 +151,10 @@
           <div class="mb-3">
             <label class="form-label">Asset Type</label>
             <input type="text" name="asset_type" class="form-control" value="{{ asset.AssetType or '' }}">
+          </div>
+          <div class="mb-3">
+            <label for="capacity" class="form-label">Capacity (Gallons)</label>
+            <input type="number" step="any" name="capacity" id="capacity" class="form-control" value="{{ asset.Capacity or '' }}">
           </div>
           <div class="mb-3">
             <label class="form-label">Description</label>
