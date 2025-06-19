@@ -377,10 +377,10 @@ def tanklevels():
                                    start=selected_start.date(), end=selected_end.date(),
                                    month_offset=month_offset,
                                    date_range=f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}",
-                                   chart_data={}, chart_trends={})
+                                   chart_data=[], chart_trends=[])
 
     if tank_filter:
-        where_clauses.append("TankName LIKE :tank")
+        where_clauses.append("PreferredTankName LIKE :tank")
         params["tank"] = f"%{tank_filter}%"
 
     # --- Table and Line Chart Query ---
@@ -407,33 +407,28 @@ def tanklevels():
     access_filter = f" AND {' AND '.join(access_clauses)}" if access_clauses else ""
 
     bar_query = f"""
-        SELECT 
-            CASE 
-                WHEN NULLIF(a.LocalName, '') IS NOT NULL THEN a.LocalName
-                ELSE tl.TankName
-            END AS Label,
-            s.SiteName,
-            tl.Volume,
-            tl.ReadingTimestamp,
-            a.Capacity
-        FROM TankLevels tl
-        JOIN Assets a ON tl.TankID = a.AssetName
-        LEFT JOIN Sites s ON a.SiteID = s.SiteID
-        WHERE tl.[ReadingTimestamp] = (
+        SELECT
+            PreferredTankName,
+            SiteName,
+            Volume,
+            ReadingTimestamp,
+            Capacity
+        FROM vw_TankLevelsWithName
+        WHERE [ReadingTimestamp] = (
             SELECT MAX(t2.ReadingTimestamp)
-            FROM TankLevels t2
-            WHERE t2.TankID = tl.TankID
+            FROM vw_TankLevelsWithName t2
+            WHERE t2.TankID = vw_TankLevelsWithName.TankID
         )
         {access_filter}
     """
+
 
     bar_data = []
     with engine.connect() as conn:
         bar_rows = conn.execute(text(bar_query), params).fetchall()
         for row in bar_rows:
-            label = row.Label  # This already uses CASE WHEN for LocalName/TankName
             bar_data.append({
-                "TankName": label,
+                "PreferredTankName": row.PreferredTankName,
                 "SiteName": row.SiteName or "Unassigned",
                 "Volume": float(row.Volume),
                 "Capacity": float(row.Capacity) if row.Capacity is not None else None,
@@ -443,24 +438,18 @@ def tanklevels():
     # --- Line Chart Trend Data ---
     trend_data = []
     for row in rows:
-        tank_id = row.get("TankID")
-        fallback_tankname = row.get("TankName")
+        label = row.get("PreferredTankName")  # Use the name directly from the view
         timestamp = row.get("ReadingTimestamp")
         volume = row.get("Volume")
 
-        # Lookup preferred label
-        asset = asset_info.get(tank_id, {})
-        label = asset.get("LocalName")
-        label = label if label and label.strip() else fallback_tankname
-
         if label and timestamp and volume is not None:
             trend_data.append({
-                "TankName": label,
+                "PreferredTankName": label,
                 "Timestamp": timestamp.isoformat(),
                 "Volume": float(volume)
             })
 
-    trend_data.sort(key=lambda p: (p["TankName"], p["Timestamp"]))
+    trend_data.sort(key=lambda p: (p["PreferredTankName"], p["Timestamp"]))
 
     return render_template("tanklevels.html",
                            headers=headers,

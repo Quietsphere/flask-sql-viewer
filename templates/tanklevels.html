@@ -97,7 +97,7 @@
   {% for row in rows %}
     <tr>
       <td>{{ row['PreferredTankName'] }}</td>
-      <td>{{ row['Site'] }}</td>
+      <td>{{ row['SiteName'] }}</td>
       <td>{{ row['Owner'] }}</td>
       <td>{{ row['Supplier'] }}</td>
       <td>{{ row['Product'] }}</td>
@@ -115,6 +115,7 @@
 
 <script>
   const barChartData = {{ chart_data | tojson }};
+  console.log("barChartData", barChartData);
   const lineChartData = {{ chart_trends | tojson }};
 </script>
 
