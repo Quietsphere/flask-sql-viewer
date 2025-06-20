@@ -199,20 +199,20 @@
 <script>
   $(document).ready(function () {
     var table = $('#assets-table').DataTable({
-      order: [[4, 'asc']],
+      order: [[5, 'asc']],
       pageLength: 10,
       rowGroup: {
-        dataSrc: 4
+        dataSrc: 5
       },
       columnDefs: [
-        { targets: 4, visible: false },
-        { targets: 6, orderable: false }
+        { targets: 5, visible: false },
+        { targets: 7, orderable: false }
       ]
     });
 
     $('#siteFilter').on('change', function () {
       var val = this.value;
-      table.column(4).search(val === 'Unassigned' ? '^Unassigned$' : val, true, false).draw();
+      table.column(5).search(val === 'Unassigned' ? '^Unassigned$' : val, true, false).draw();
     });
   });
 </script>
