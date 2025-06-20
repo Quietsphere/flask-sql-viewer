@@ -36,16 +36,18 @@
 
 <body class="container py-4">
   <!-- Navigation -->
-<nav>
+
+    <nav>
     <a href="/">Dashboard</a>
     <a href="/transactions">Transactions</a>
     <a href="/tanklevels">Tank Levels</a>
     {% if session.get("is_admin") %}
         <a href="/admin/users">Users</a>
         <a href="/admin/sites">Sites and Assets</a>
+        <a href="/admin/products">Products</a>
     {% endif %}
     <a href="/logout">Logout</a>
-</nav>
+    </nav>
 
 
   <h1>Transactions</h1>

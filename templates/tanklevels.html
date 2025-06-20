@@ -24,16 +24,18 @@
 </head>
 <body class="container py-4">
   <!-- Navigation -->
-<nav>
+
+    <nav>
     <a href="/">Dashboard</a>
     <a href="/transactions">Transactions</a>
     <a href="/tanklevels">Tank Levels</a>
     {% if session.get("is_admin") %}
         <a href="/admin/users">Users</a>
         <a href="/admin/sites">Sites and Assets</a>
+        <a href="/admin/products">Products</a>
     {% endif %}
     <a href="/logout">Logout</a>
-</nav>
+    </nav>
 
 
   <h1 class="mb-3">Tank Levels</h1>
@@ -115,8 +117,8 @@
 
 <script>
   const barChartData = {{ chart_data | tojson }};
-  console.log("barChartData", barChartData);
   const lineChartData = {{ chart_trends | tojson }};
+  const barColors = barChartData.map(t => t.ColorHex || "#3692eb");
 </script>
 
 <script>
@@ -174,9 +176,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // --- Bar Chart ---
   const barLabels = barChartData.map(t => t.PreferredTankName);
-  const barVolumes = barChartData.map(t => t.Volume);
-  const barEmpties = barChartData.map(t =>
-    (t.Capacity != null && t.Volume != null) ? (t.Capacity - t.Volume) : 0
+  const barPercentsFull = barChartData.map(t =>
+    t.Capacity && t.Capacity > 0 ? Math.round((t.Volume / t.Capacity) * 100) : 0
+  );
+  const barPercentsEmpty = barChartData.map((t, i) =>
+    100 - barPercentsFull[i]
   );
   const barTimestamps = barChartData.map(t => t.Timestamp);
 
@@ -186,15 +190,15 @@ document.addEventListener("DOMContentLoaded", function () {
       labels: barLabels,
       datasets: [
         {
-          label: "Filled",
-          data: barVolumes,
-          backgroundColor: "rgba(54, 162, 235, 0.6)",
-          borderColor: "rgba(54, 162, 235, 1)",
+          label: "Filled (%)",
+          data: barPercentsFull,
+          backgroundColor: barColors,
+          borderColor: barColors,
           borderWidth: 1
         },
         {
-          label: "Empty",
-          data: barEmpties,
+          label: "Empty (%)",
+          data: barPercentsEmpty,
           backgroundColor: "rgba(200, 200, 200, 0.4)",
           borderColor: "rgba(200, 200, 200, 1)",
           borderWidth: 1
@@ -209,10 +213,13 @@ document.addEventListener("DOMContentLoaded", function () {
             label: function (context) {
               const tank = barChartData[context.dataIndex];
               const ts = tank.Timestamp?.split("T")[0] || "";
-              if (context.dataset.label === "Filled") {
-                return `${tank.PreferredTankName || tank.TankName}: ${tank.Volume} gal @ ${ts}`;
+              if (context.dataset.label.startsWith("Filled")) {
+                return `${tank.PreferredTankName}: ${tank.Volume} gal filled @ ${ts}`;
               } else {
-                return `Remaining Capacity: ${tank.Capacity - tank.Volume} gal`;
+                const empty = (tank.Capacity && tank.Capacity > 0 && tank.Volume != null)
+                  ? (tank.Capacity - tank.Volume)
+                  : '';
+                return `${empty} gal remaining`;
               }
             }
           }
@@ -223,9 +230,12 @@ document.addEventListener("DOMContentLoaded", function () {
           font: { size: 10 },
           formatter: function (value, context) {
             const tank = barChartData[context.dataIndex];
-            return context.dataset.label === "Filled"
-              ? `${tank.PreferredTankName || tank.TankName}\n${value} gal`
-              : '';
+            if (context.dataset.label.startsWith("Filled")) {
+              // Show the *gallon* value on the bar, not the percent
+              return `${tank.Volume} gal`;
+            }
+            // Don't show datalabel for empty
+            return '';
           }
         }
       },
@@ -238,7 +248,7 @@ document.addEventListener("DOMContentLoaded", function () {
         y: {
           stacked: true,
           beginAtZero: true,
-          title: { display: true, text: "Volume (Gal)" }
+          title: { display: true, text: "%" }
         }
       }
     },

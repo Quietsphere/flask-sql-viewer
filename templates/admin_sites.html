@@ -15,16 +15,18 @@
 </head>
 <body class="container py-4">
 
-<nav>
+
+    <nav>
     <a href="/">Dashboard</a>
     <a href="/transactions">Transactions</a>
     <a href="/tanklevels">Tank Levels</a>
     {% if session.get("is_admin") %}
         <a href="/admin/users">Users</a>
         <a href="/admin/sites">Sites and Assets</a>
+        <a href="/admin/products">Products</a>
     {% endif %}
     <a href="/logout">Logout</a>
-</nav>
+    </nav>
 
 
 <h1 class="mb-4">Sites and Assets</h1>
@@ -83,6 +85,29 @@
         <button type="submit" class="btn btn-success">Create Site</button>
     </div>
 </form>
+
+<form method="post" action="{{ url_for('admin_products') }}">
+  <table>
+    <tr>
+      <th>Product</th>
+      <th>Color</th>
+      <th>Save</th>
+    </tr>
+    {% for product in products %}
+    <tr>
+      <td>{{ product.ProductName }}</td>
+      <td>
+        <input type="color" name="color_hex_{{ product.ProductName|e }}" value="{{ product.ColorHex or '#cccccc' }}">
+      </td>
+      <td>
+        <button type="submit" name="product_name" value="{{ product.ProductName }}">Save</button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <input type="hidden" name="form_type" value="update_product_color">
+</form>
+
 
 <!-- FILTER -->
 <h2>Assets</h2>

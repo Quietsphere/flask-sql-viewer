@@ -9,17 +9,17 @@
 <body class="container py-4">
 
 <!-- Navigation -->
-<nav>
+<nav class="mb-4">
     <a href="/">Dashboard</a>
     <a href="/transactions">Transactions</a>
     <a href="/tanklevels">Tank Levels</a>
     {% if session.get("is_admin") %}
         <a href="/admin/users">Users</a>
         <a href="/admin/sites">Sites and Assets</a>
+        <a href="/admin/products">Products</a>
     {% endif %}
     <a href="/logout">Logout</a>
 </nav>
-
 
 <!-- Flash Messages -->
 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -33,32 +33,55 @@
   {% endif %}
 {% endwith %}
 
-<!-- Page Content -->
-<h1 class="mb-4">Dashboard</h1>
-<p class="lead">Welcome to Fluid Tracker. Use the navigation above to access system data and manage your assets.</p>
+<!-- Site Selector (if user has more than one site) -->
+<h1 class="mb-4">Dashboard – {{ current_site.name }}</h1>
+{% if user_sites|length > 1 %}
+<form method="get" class="mb-4">
+    <label for="site_select" class="form-label">Select Site:</label>
+    <select id="site_select" name="site_id" class="form-select w-auto d-inline-block" onchange="this.form.submit()">
+      {% for site in user_sites %}
+      <option value="{{ site.id }}" {% if site.id == current_site.id %}selected{% endif %}>{{ site.name }}</option>
+      {% endfor %}
+    </select>
+</form>
+{% endif %}
 
-<div class="row">
-    <div class="col-md-6">
-        <div class="card shadow-sm mb-4">
+<!-- Site Product Inventory Cards -->
+<div class="row mb-4">
+    {% for product in products %}
+    <div class="col-md-4 mb-3">
+        <div class="card text-center shadow-sm h-100"
+             style="border-top: 6px solid {{ product_colors[product.name]|default('#999') }};">
             <div class="card-body">
-                <h5 class="card-title">Transactions</h5>
-                <p class="card-text">View and analyze fluid transaction data.</p>
-                <a href="/transactions" class="btn btn-outline-primary">View Transactions</a>
+                <h6 class="card-title" style="color: {{ product_colors[product.name]|default('#333') }};">
+                  {{ product.name }}
+                </h6>
+                <p class="mb-2">
+                    <span class="fw-bold">{{ product.current_inventory }}</span> gal
+                </p>
+                <p>
+                    <span class="fw-medium text-muted">
+                    {% if product.inventory_delta > 0 %}
+                        <span class="text-success">▲ +{{ product.inventory_delta }} gal</span>
+                    {% elif product.inventory_delta < 0 %}
+                        <span class="text-danger">▼ {{ product.inventory_delta }} gal</span>
+                    {% else %}
+                        <span class="text-secondary">0 gal</span>
+                    {% endif %}
+                    </span>
+                    <br>
+                    <small class="text-muted d-block">
+                        (latest: {{ product.last_reading }}, previous: {{ product.previous_reading }})
+                    </small>
+                </p>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card shadow-sm mb-4">
-            <div class="card-body">
-                <h5 class="card-title">Tank Levels</h5>
-                <p class="card-text">Monitor current and historical tank readings.</p>
-                <a href="/tanklevels" class="btn btn-outline-primary">View Tank Levels</a>
-            </div>
-        </div>
-    </div>
+    {% endfor %}
 </div>
 
-<!-- Optionally add more dashboard stats or summaries here -->
+
+<!-- Optionally add a chart or recent transactions here -->
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

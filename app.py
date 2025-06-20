@@ -108,10 +108,75 @@ def sync_assets_from_data():
                 existing_names.add(name)
 
 
-@app.route("/")
+def get_product_colors():
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT ProductName, ColorHex FROM ProductColors"))
+        return {row.ProductName: row.ColorHex for row in result}
+
+def get_site_products(site_id):
+    query = """
+    SELECT Product, CurrentInventory, PreviousInventory, Movement, LastReading, PreviousReading
+    FROM v_ProductInventoryAndMovement
+    WHERE SiteID = :site_id
+    """
+    with engine.connect() as conn:
+        result = conn.execute(text(query), {"site_id": site_id})
+        return [
+            {
+                "name": row.Product,
+                "current_inventory": row.CurrentInventory,
+                "previous_inventory": row.PreviousInventory,
+                "inventory_delta": row.Movement,
+                "last_reading": (
+                    row.LastReading.strftime('%Y-%m-%d %H:%M')
+                    if hasattr(row.LastReading, "strftime") else str(row.LastReading)
+                ) if row.LastReading else "unknown",
+                "previous_reading": (
+                    row.PreviousReading.strftime('%Y-%m-%d %H:%M')
+                    if hasattr(row.PreviousReading, "strftime") else str(row.PreviousReading)
+                ) if row.PreviousReading else "unknown"
+            }
+            for row in result
+        ]
+
+
+@app.route('/')
 @login_required
-def dashboard():
-    return render_template("index.html")
+def index():
+    user_id = session["user_id"]
+    user_sites = get_user_site_access(user_id)
+
+    if not user_sites:
+        if session.get("is_admin"):
+            # Load all sites for admin
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT SiteID, SiteName FROM Sites"))
+                user_sites = [{"id": row.SiteID, "name": row.SiteName} for row in result]
+        else:
+            flash("No site access assigned.", "danger")
+            return redirect(url_for("logout"))
+    else:
+        # Normalize for regular users too!
+        user_sites = [{"id": s.SiteID, "name": s.SiteName} for s in user_sites]
+
+    site_id = request.args.get("site_id")
+    site_ids = {str(s["id"]) for s in user_sites}
+    if not site_id or site_id not in site_ids:
+        site_id = str(user_sites[0]["id"])
+    current_site = next(s for s in user_sites if str(s["id"]) == str(site_id))
+
+    products = get_site_products(site_id)
+    product_colors = get_product_colors()
+
+    return render_template(
+        "index.html",
+        user_sites=user_sites,
+        current_site=current_site,
+        products=products,
+        product_colors=product_colors
+    )
+
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -142,7 +207,7 @@ def login():
                     "user_id": user_row.UserID
                 })
 
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("index"))
         else:
             flash("Invalid email or password.", "danger")
 
@@ -412,7 +477,8 @@ def tanklevels():
             SiteName,
             Volume,
             ReadingTimestamp,
-            Capacity
+            Capacity,
+            Product
         FROM vw_TankLevelsWithName
         WHERE [ReadingTimestamp] = (
             SELECT MAX(t2.ReadingTimestamp)
@@ -421,18 +487,23 @@ def tanklevels():
         )
         {access_filter}
     """
+    with engine.connect() as conn:
+        color_map = dict(conn.execute(text("SELECT ProductName, ColorHex FROM ProductColors")).fetchall())
 
 
     bar_data = []
     with engine.connect() as conn:
         bar_rows = conn.execute(text(bar_query), params).fetchall()
         for row in bar_rows:
+            product = getattr(row, "Product", None) or ""  # Adjust if product comes from a different key
             bar_data.append({
                 "PreferredTankName": row.PreferredTankName,
                 "SiteName": row.SiteName or "Unassigned",
                 "Volume": float(row.Volume),
                 "Capacity": float(row.Capacity) if row.Capacity is not None else None,
-                "Timestamp": row.ReadingTimestamp.isoformat() if row.ReadingTimestamp else ""
+                "Timestamp": row.ReadingTimestamp.isoformat() if row.ReadingTimestamp else "",
+                "Product": product,
+                "ColorHex": color_map.get(product, "#3692eb")  # fallback color
             })
 
     # --- Line Chart Trend Data ---
@@ -591,6 +662,50 @@ def admin_users():
 
     return render_template("admin_users.html", users=users, assignments=assignments, sites=sites, company_names=company_names)
 
+@app.route('/admin/products', methods=['GET', 'POST'])
+@admin_required
+def admin_products():
+    if request.method == 'POST':
+        form_type = request.form.get('form_type')
+        product_name = request.form.get('product_name')
+        
+        if form_type == 'update_product_color':
+            color_hex = request.form.get(f'color_hex_{product_name}')
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    MERGE ProductColors AS pc
+                    USING (SELECT :product_name AS ProductName) AS vals
+                    ON pc.ProductName = vals.ProductName
+                    WHEN MATCHED THEN
+                        UPDATE SET ColorHex = :color_hex
+                    WHEN NOT MATCHED THEN
+                        INSERT (ProductName, ColorHex) VALUES (:product_name, :color_hex);
+                """), {"product_name": product_name, "color_hex": color_hex})
+            flash(f"Color for '{product_name}' updated!", "success")
+            return redirect(url_for('admin_products'))
+
+        elif form_type == 'delete_product_color':
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM ProductColors WHERE ProductName = :product_name"),
+                    {"product_name": product_name}
+                )
+            flash(f"Color for '{product_name}' removed.", "info")
+            return redirect(url_for('admin_products'))
+
+    with engine.connect() as conn:
+        colored_products = conn.execute(text("""
+            SELECT ProductName, ColorHex FROM ProductColors ORDER BY ProductName
+        """)).fetchall()
+        missing_products = conn.execute(text("""
+            SELECT ProductName FROM vw_ProductsMissingColor ORDER BY ProductName
+        """)).fetchall()
+
+    return render_template(
+        'admin_products.html',
+        colored_products=colored_products,
+        missing_products=missing_products
+    )
 
 
 
