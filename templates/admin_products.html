@@ -1,35 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Products</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/rowgroup/1.3.1/css/rowGroup.dataTables.min.css">
-    <style>
-        td, th {
-            vertical-align: middle !important;
-        }
-    </style>
-</head>
-<body class="container py-4">
+{% extends "base.html" %}
+{% block title %}Products &mdash; FluidOps{% endblock %}
 
-    <nav>
-    <a href="/">Dashboard</a>
-    <a href="/transactions">Transactions</a>
-    <a href="/tanklevels">Tank Levels</a>
-    {% if session.get("is_admin") %}
-        <a href="/admin/users">Users</a>
-        <a href="/admin/sites">Sites and Assets</a>
-        <a href="/admin/products">Products</a>
-    {% endif %}
-    <a href="/logout">Logout</a>
-    </nav>
-
-<h2>Products With Colors</h2>
-<table class="table">
-  <thead>
+{% block content %}
+<h1 class="mb-4">Products With Colors</h1>
+<table class="table align-middle">
+  <thead class="table-light">
     <tr>
       <th>Product</th>
       <th>Color</th>
@@ -40,7 +15,7 @@
   <tbody>
     {% for p in colored_products %}
     <tr>
-      <form method="post" style="display:inline;">
+      <form method="post" class="d-inline">
         <input type="hidden" name="form_type" value="update_product_color">
         <input type="hidden" name="product_name" value="{{ p.ProductName }}">
         <td>{{ p.ProductName }}</td>
@@ -51,7 +26,7 @@
           <button type="submit" class="btn btn-sm btn-primary">Update</button>
         </td>
       </form>
-      <form method="post" style="display:inline;">
+      <form method="post" class="d-inline">
         <input type="hidden" name="form_type" value="delete_product_color">
         <input type="hidden" name="product_name" value="{{ p.ProductName }}">
         <td>
@@ -63,9 +38,9 @@
   </tbody>
 </table>
 
-<h2>Products Missing Colors</h2>
-<table class="table">
-  <thead>
+<h2 class="mt-5 mb-3">Products Missing Colors</h2>
+<table class="table align-middle">
+  <thead class="table-light">
     <tr>
       <th>Product</th>
       <th>Assign Color</th>
@@ -90,5 +65,4 @@
     {% endfor %}
   </tbody>
 </table>
-</body>
-</html>
+{% endblock %}
