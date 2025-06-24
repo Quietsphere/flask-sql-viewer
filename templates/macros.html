@@ -1,0 +1,4 @@
+{# macros.html #}
+{% macro format_gallons(value) %}
+    {{ "{:,}".format(value|round|int) }}
+{% endmacro %}

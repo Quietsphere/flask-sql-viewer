@@ -7,7 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="container py-4">
-
+{% import "macros.html" as macros %}
 <!-- Navigation -->
 <nav class="mb-4">
     <a href="/">Dashboard</a>
@@ -33,8 +33,58 @@
   {% endif %}
 {% endwith %}
 
+<!-- Toggle button -->
+{% if not is_admin %}
+<div class="mb-3">
+  <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#daysToEmptySettings" aria-expanded="false" aria-controls="daysToEmptySettings">
+    ⚙️ Days to Empty Settings
+  </button>
+</div>
+{% endif %}
+<h1 class="mb-4">{{ current_site.name }}</h1>
+<!-- Collapsible panel -->
+<div class="collapse" id="daysToEmptySettings">
+  <div class="card card-body mb-4 shadow-sm">
+    <form method="post">
+      <table class="table table-sm align-middle" style="max-width:600px;">
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th style="width:160px;">Days to Average</th>
+            <th style="width:60px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for site in user_sites %}
+          <tr>
+            <td>{{ site.name }}</td>
+            <td>
+              <input type="number" name="span_days_{{ site.id }}" value="{{ site.span_days or 7 }}" min="1" max="30" class="form-control" style="width:90px;display:inline;">
+            </td>
+            <td>
+              <button type="submit" name="update_site" value="{{ site.id }}" class="btn btn-primary btn-sm">Update</button>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr>
+            <td><strong>All Sites</strong></td>
+            <td>
+              <input type="number" name="span_days_all" value="" min="1" max="30" class="form-control" style="width:90px;display:inline;">
+            </td>
+            <td>
+              <button type="submit" name="update_all" value="1" class="btn btn-secondary btn-sm">Update All</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </form>
+  </div>
+</div>
+
+
+
 <!-- Site Selector (if user has more than one site) -->
-<h1 class="mb-4">Dashboard – {{ current_site.name }}</h1>
+
 {% if user_sites|length > 1 %}
 <form method="get" class="mb-4">
     <label for="site_select" class="form-label">Select Site:</label>
@@ -50,30 +100,47 @@
 <div class="row mb-4">
     {% for product in products %}
     <div class="col-md-4 mb-3">
-        <div class="card text-center shadow-sm h-100"
-             style="border-top: 6px solid {{ product_colors[product.name]|default('#999') }};">
+        <div class="card shadow-sm h-100" style="border-top: 6px solid {{ product_colors[product.name]|default('#999') }};">
             <div class="card-body">
-                <h6 class="card-title" style="color: {{ product_colors[product.name]|default('#333') }};">
-                  {{ product.name }}
-                </h6>
-                <p class="mb-2">
-                    <span class="fw-bold">{{ product.current_inventory }}</span> gal
-                </p>
-                <p>
-                    <span class="fw-medium text-muted">
-                    {% if product.inventory_delta > 0 %}
-                        <span class="text-success">▲ +{{ product.inventory_delta }} gal</span>
-                    {% elif product.inventory_delta < 0 %}
-                        <span class="text-danger">▼ {{ product.inventory_delta }} gal</span>
-                    {% else %}
-                        <span class="text-secondary">0 gal</span>
-                    {% endif %}
+                <!-- Product name -->
+                <h5 class="card-title mb-3" style="color: {{ product_colors[product.name]|default('#333') }};">
+                    {{ product.name }}
+                </h5>
+                <!-- Current inventory (big number) -->
+                <div class="display-5 fw-bold mb-2">{{ macros.format_gallons(product.current_inventory) }}</div>
+                <div class="mb-2 text-uppercase" style="letter-spacing: 1px; font-size: 0.9rem;">Gallons</div>
+                <!-- Movement arrow and value -->
+                <div class="mb-3">
+                  {% if product.inventory_delta > 0 %}
+                    <span class="text-success fw-semibold">
+                      ▲ +{{ macros.format_gallons(product.inventory_delta) }} gal
                     </span>
-                    <br>
-                    <small class="text-muted d-block">
-                        (latest: {{ product.last_reading }}, previous: {{ product.previous_reading }})
-                    </small>
-                </p>
+                  {% elif product.inventory_delta < 0 %}
+                    <span class="text-danger fw-semibold">
+                      ▼ {{ macros.format_gallons(product.inventory_delta) }} gal
+                    </span>
+                  {% else %}
+                    <span class="text-secondary fw-semibold">0 gal</span>
+                  {% endif %}
+                </div>
+                <!-- Readings summary -->
+                <div class="small text-muted" style="line-height: 1.4;">
+                  <span>
+                    Latest:&nbsp;
+                    <span class="fw-semibold">{{ product.last_reading }}</span>
+                  </span><br>
+                  <span>
+                    Previous:&nbsp;
+                    <span class="fw-semibold">{{ product.previous_reading }}</span>
+                  </span>
+                </div>
+                <div class="small mt-2 text-muted">
+    {% if product.days_to_empty %}
+        Est. days to empty ({{ span_days }}-day avg): <span class="fw-bold">{{ product.days_to_empty|round(1) }}</span>
+    {% else %}
+        <span class="text-danger">No usage data</span>
+    {% endif %}
+</div>
             </div>
         </div>
     </div>
@@ -81,9 +148,11 @@
 </div>
 
 
+
 <!-- Optionally add a chart or recent transactions here -->
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>

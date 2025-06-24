@@ -35,6 +35,7 @@
 </head>
 
 <body class="container py-4">
+  {% import "macros.html" as macros %}
   <!-- Navigation -->
 
     <nav>
@@ -146,15 +147,20 @@
       {% endfor %}
     </tr>
   </thead>
-  <tbody>
-    {% for row in rows %}
-      <tr>
-        {% for col_key, _ in display_columns %}
+<tbody>
+  {% for row in rows %}
+    <tr>
+      {% for col_key, _ in display_columns %}
+        {% if col_key == "VolumeDelivered" %}
+          <td>{{ macros.format_gallons(row[col_key]) }}</td>
+        {% else %}
           <td>{{ row[col_key] }}</td>
-        {% endfor %}
-      </tr>
-    {% endfor %}
-  </tbody>
+        {% endif %}
+      {% endfor %}
+    </tr>
+  {% endfor %}
+</tbody>
+
 </table>
 
 
@@ -175,60 +181,61 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-  <script>
-    $(document).ready(function () {
-      // Select2
-      $('.filter-select').select2({
-        placeholder: 'Select options',
-        allowClear: true,
-        width: '100%'
-      });
-
-      $('.filter-select, #start_date, #end_date').on('change', function () {
-        $('.filter-form').submit();
-      });
-
-      const getExportFilename = () => {
-        const start = $('#start_date').val() || 'start';
-        const end = $('#end_date').val() || 'end';
-        return `transactions_${start}_to_${end}`;
-      };
-
-      const columnNames = $('#transactions-table').data('column-names') || [];
-      const volumeIndex = columnNames.findIndex(name => name.toLowerCase().replace(/[^a-z]/g, '') === 'volumedelivered');
-
-      const table = $('#transactions-table').DataTable({
-        dom: '<"top-container"<"top-search"f><"top-buttons"B>>rt<"bottom"lip>',
-        buttons: [
-          { extend: 'copyHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
-          { extend: 'csvHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
-          { extend: 'excelHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
-          { extend: 'pdfHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
-          { extend: 'print', exportOptions: { columns: ':visible' } },
-          'colvis'
-        ],
-        paging: true,
-        pageLength: 25,
-        lengthMenu: [10, 25, 50, 100],
-        scrollX: true,
-        stateSave: true,
-        drawCallback: function () {
-          updateTotalVolume();
-        }
-      });
-
-      function updateTotalVolume() {
-        if (volumeIndex === -1) return;
-        let total = 0;
-        table.rows({ search: 'applied' }).every(function () {
-          const val = parseFloat(String(this.data()[volumeIndex]).replace(/[^0-9.\-]+/g, ''));
-          if (!isNaN(val)) total += val;
-        });
-        $('#total-volume').text(total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-      }
-
-      updateTotalVolume();
+<script>
+  $(document).ready(function () {
+    // Select2
+    $('.filter-select').select2({
+      placeholder: 'Select options',
+      allowClear: true,
+      width: '100%'
     });
-  </script>
+
+    $('.filter-select, #start_date, #end_date').on('change', function () {
+      $('.filter-form').submit();
+    });
+
+    const getExportFilename = () => {
+      const start = $('#start_date').val() || 'start';
+      const end = $('#end_date').val() || 'end';
+      return `transactions_${start}_to_${end}`;
+    };
+
+    const columnNames = $('#transactions-table').data('column-names') || [];
+    const volumeIndex = columnNames.findIndex(name => name.toLowerCase().replace(/[^a-z]/g, '') === 'volumedelivered');
+
+    const table = $('#transactions-table').DataTable({
+      dom: '<"top-container"<"top-search"f><"top-buttons"B>>rt<"bottom"lip>',
+      buttons: [
+        { extend: 'copyHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+        { extend: 'csvHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+        { extend: 'excelHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+        { extend: 'pdfHtml5', exportOptions: { columns: ':visible' }, filename: getExportFilename },
+        { extend: 'print', exportOptions: { columns: ':visible' } },
+        'colvis'
+      ],
+      paging: true,
+      pageLength: 25,
+      lengthMenu: [10, 25, 50, 100],
+      scrollX: true,
+      stateSave: true,
+      drawCallback: function () {
+        updateTotalVolume();
+      }
+    });
+
+    function updateTotalVolume() {
+      if (volumeIndex === -1) return;
+      let total = 0;
+      table.rows({ search: 'applied' }).every(function () {
+        const val = parseFloat(String(this.data()[volumeIndex]).replace(/[^0-9.\-]+/g, ''));
+        if (!isNaN(val)) total += val;
+      });
+      $('#total-volume').text(Math.round(total).toLocaleString());
+    }
+
+    // Make sure to call it *after* table is defined
+    updateTotalVolume();
+  });
+</script>
 </body>
 </html>

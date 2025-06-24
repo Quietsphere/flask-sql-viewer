@@ -25,13 +25,16 @@ engine = create_engine(connection_string)
 
 def get_user_site_access(user_id):
     with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT usa.SiteID, s.SiteName, usa.HasFullAccess
-            FROM UserSiteAccess usa
-            JOIN Sites s ON usa.SiteID = s.SiteID
-            WHERE usa.UserID = :user_id
-        """), {"user_id": user_id}).fetchall()
-    return rows
+        result = conn.execute(
+            text("""
+                SELECT Sites.SiteID AS id, Sites.SiteName AS name, USA.HasFullAccess, COALESCE(USA.DaysToEmptySpan, 7) AS span_days
+                FROM UserSiteAccess USA
+                JOIN Sites ON Sites.SiteID = USA.SiteID
+                WHERE USA.UserID = :user_id
+            """),
+            {"user_id": user_id}
+        )
+        return [dict(row._mapping) for row in result]
 
 def get_date_range(request_args):
     today = date.today()
@@ -113,7 +116,7 @@ def get_product_colors():
         result = conn.execute(text("SELECT ProductName, ColorHex FROM ProductColors"))
         return {row.ProductName: row.ColorHex for row in result}
 
-def get_site_products(site_id):
+def get_site_products(site_id, span_days=7):
     query = """
     SELECT Product, CurrentInventory, PreviousInventory, Movement, LastReading, PreviousReading
     FROM v_ProductInventoryAndMovement
@@ -140,32 +143,42 @@ def get_site_products(site_id):
         ]
 
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 @login_required
 def index():
     user_id = session["user_id"]
-    user_sites = get_user_site_access(user_id)
+    is_admin = session.get("is_admin", False)
 
+    # Regular users: handle span setting updates (POST)
+    if not is_admin and request.method == "POST":
+       pass  # TODO: Handle updates to DaysToEmptySpan
+
+    # Get sites for sidebar, etc.
+    user_sites = get_user_site_access(user_id)
     if not user_sites:
-        if session.get("is_admin"):
-            # Load all sites for admin
+        if is_admin:
+            # Admin: load all sites with a fixed span_days = 7
             with engine.connect() as conn:
                 result = conn.execute(text("SELECT SiteID, SiteName FROM Sites"))
-                user_sites = [{"id": row.SiteID, "name": row.SiteName} for row in result]
+                user_sites = [{"id": row.SiteID, "name": row.SiteName, "span_days": 7} for row in result]
         else:
-            flash("No site access assigned.", "danger")
+            flash("You do not have any sites assigned yet. Please contact your administrator.", "warning")
             return redirect(url_for("logout"))
-    else:
-        # Normalize for regular users too!
-        user_sites = [{"id": s.SiteID, "name": s.SiteName} for s in user_sites]
 
+    # Figure out the current site and the span setting
     site_id = request.args.get("site_id")
     site_ids = {str(s["id"]) for s in user_sites}
     if not site_id or site_id not in site_ids:
         site_id = str(user_sites[0]["id"])
     current_site = next(s for s in user_sites if str(s["id"]) == str(site_id))
 
-    products = get_site_products(site_id)
+    # --- KEY: Only regular users can set their own span, admins are fixed at 7
+    if is_admin:
+        span_days = 7
+    else:
+        span_days = current_site.get('span_days', 7)
+
+    products = get_site_products(site_id, span_days=span_days)
     product_colors = get_product_colors()
 
     return render_template(
@@ -173,10 +186,10 @@ def index():
         user_sites=user_sites,
         current_site=current_site,
         products=products,
-        product_colors=product_colors
+        product_colors=product_colors,
+        span_days=span_days,
+        is_admin=is_admin
     )
-
-
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -247,8 +260,9 @@ def transactions():
     company_name = session.get("company_name")
     access = get_user_site_access(user_id)
 
-    full_site_ids = [a.SiteID for a in access if a.HasFullAccess]
-    limited_site_ids = [a.SiteID for a in access if not a.HasFullAccess]
+    full_site_ids = [a['id'] for a in access if a.get('HasFullAccess')]
+    limited_site_ids = [a['id'] for a in access if not a.get('HasFullAccess')]
+
 
     with engine.connect() as conn:
         full_station_ids = []
@@ -384,6 +398,9 @@ def transactions():
 @app.route("/tanklevels")
 @login_required
 def tanklevels():
+    from datetime import datetime, timedelta
+    from dateutil.relativedelta import relativedelta
+
     try:
         month_offset = int(request.args.get('month_offset', 0))
     except ValueError:
@@ -413,24 +430,30 @@ def tanklevels():
 
     if not is_admin:
         access = get_user_site_access(user_id)
-        full_sites = [a.SiteID for a in access if a.HasFullAccess]
-        limited_sites = [a.SiteID for a in access if not a.HasFullAccess]
+        # Adapt for your access object shape
+        full_sites = [a.SiteID if hasattr(a, "SiteID") else a["id"] for a in access if (a.HasFullAccess if hasattr(a, "HasFullAccess") else a.get("HasFullAccess"))]
+        limited_sites = [a.SiteID if hasattr(a, "SiteID") else a["id"] for a in access if not (a.HasFullAccess if hasattr(a, "HasFullAccess") else a.get("HasFullAccess"))]
 
-        with engine.connect() as conn:
-            result = conn.execute(text("""
-                SELECT AssetName, SiteID, CompanyName, Capacity
-                FROM Assets
-                WHERE AssetType = 'Tank'
-            """))
-            for row in result:
-                asset_name = row.AssetName
-                site_id = row.SiteID
-                tank_company = row.CompanyName
+        assigned_site_ids = set(full_sites + limited_sites)
 
-                if site_id in full_sites:
-                    visible_tank_ids.append(asset_name)
-                elif site_id in limited_sites and tank_company and tank_company == user_company:
-                    visible_tank_ids.append(asset_name)
+        if assigned_site_ids:
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                        SELECT AssetName, SiteID, CompanyName
+                        FROM Assets
+                        WHERE AssetType = 'Tank'
+                    """)
+                )
+                for row in result:
+                    site_id = row.SiteID
+                    tank_company = row.CompanyName
+                    asset_name = row.AssetName
+
+                    if site_id in full_sites:
+                        visible_tank_ids.append(asset_name)
+                    elif site_id in limited_sites and tank_company and tank_company == user_company:
+                        visible_tank_ids.append(asset_name)
 
         if visible_tank_ids:
             placeholders = [f":tank_{i}" for i in range(len(visible_tank_ids))]
@@ -448,7 +471,7 @@ def tanklevels():
         where_clauses.append("PreferredTankName LIKE :tank")
         params["tank"] = f"%{tank_filter}%"
 
-    # --- Table and Line Chart Query ---
+    # --- Main Table Query ---
     query = f"""
         SELECT *
         FROM vw_TankLevelsWithName
@@ -457,7 +480,7 @@ def tanklevels():
     """
     headers, rows = get_data(query, params)
 
-    # Before your main code in /tanklevels route
+    # --- Asset Info ---
     with engine.connect() as conn:
         asset_info = {
             row.AssetName: {
@@ -465,7 +488,6 @@ def tanklevels():
             }
             for row in conn.execute(text("SELECT AssetName, LocalName FROM Assets WHERE AssetType = 'Tank'"))
         }
-
 
     # --- Bar Chart Query (Most Recent Readings) ---
     access_clauses = [clause for clause in where_clauses if not clause.startswith("[ReadingTimestamp]")]
@@ -490,12 +512,11 @@ def tanklevels():
     with engine.connect() as conn:
         color_map = dict(conn.execute(text("SELECT ProductName, ColorHex FROM ProductColors")).fetchall())
 
-
     bar_data = []
     with engine.connect() as conn:
         bar_rows = conn.execute(text(bar_query), params).fetchall()
         for row in bar_rows:
-            product = getattr(row, "Product", None) or ""  # Adjust if product comes from a different key
+            product = getattr(row, "Product", None) or ""
             bar_data.append({
                 "PreferredTankName": row.PreferredTankName,
                 "SiteName": row.SiteName or "Unassigned",
@@ -503,13 +524,13 @@ def tanklevels():
                 "Capacity": float(row.Capacity) if row.Capacity is not None else None,
                 "Timestamp": row.ReadingTimestamp.isoformat() if row.ReadingTimestamp else "",
                 "Product": product,
-                "ColorHex": color_map.get(product, "#3692eb")  # fallback color
+                "ColorHex": color_map.get(product, "#3692eb")
             })
 
     # --- Line Chart Trend Data ---
     trend_data = []
     for row in rows:
-        label = row.get("PreferredTankName")  # Use the name directly from the view
+        label = row.get("PreferredTankName")
         timestamp = row.get("ReadingTimestamp")
         volume = row.get("Volume")
 
@@ -519,7 +540,6 @@ def tanklevels():
                 "Timestamp": timestamp.isoformat(),
                 "Volume": float(volume)
             })
-
     trend_data.sort(key=lambda p: (p["PreferredTankName"], p["Timestamp"]))
 
     return render_template("tanklevels.html",
@@ -531,6 +551,7 @@ def tanklevels():
                            date_range=f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}",
                            chart_data=bar_data or [],
                            chart_trends=trend_data or [])
+
 
 @app.route("/admin/users", methods=["GET", "POST"])
 @admin_required

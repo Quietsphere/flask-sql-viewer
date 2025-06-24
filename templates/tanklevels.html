@@ -23,6 +23,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 </head>
 <body class="container py-4">
+  {% import "macros.html" as macros %}
+
   <!-- Navigation -->
 
     <nav>
@@ -105,7 +107,7 @@
       <td>{{ row['Product'] }}</td>
       <td>{{ row['ReadingTimestamp'] }}</td>
       <td>{{ row['Level'] }}</td>
-      <td>{{ row['Volume'] }}</td>
+      <td>{{ macros.format_gallons(row['Volume']) }}</td>
     </tr>
   {% endfor %}
 </tbody>
@@ -166,7 +168,7 @@ document.addEventListener("DOMContentLoaded", function () {
           align: 'top',
           font: { size: 9 },
           formatter: function(value) {
-            return `${value.y}`;
+            return `${Math.round(value.y).toLocaleString()}`;
           }
         }
       }
@@ -214,12 +216,13 @@ document.addEventListener("DOMContentLoaded", function () {
               const tank = barChartData[context.dataIndex];
               const ts = tank.Timestamp?.split("T")[0] || "";
               if (context.dataset.label.startsWith("Filled")) {
-                return `${tank.PreferredTankName}: ${tank.Volume} gal filled @ ${ts}`;
+                // Was: return `${tank.PreferredTankName}: ${tank.Volume} gal filled @ ${ts}`;
+                return `${tank.PreferredTankName}: ${Math.round(tank.Volume).toLocaleString()} gal filled @ ${ts}`;
               } else {
                 const empty = (tank.Capacity && tank.Capacity > 0 && tank.Volume != null)
                   ? (tank.Capacity - tank.Volume)
                   : '';
-                return `${empty} gal remaining`;
+                return `${Math.round(empty).toLocaleString()} gal remaining`;
               }
             }
           }
@@ -231,10 +234,9 @@ document.addEventListener("DOMContentLoaded", function () {
           formatter: function (value, context) {
             const tank = barChartData[context.dataIndex];
             if (context.dataset.label.startsWith("Filled")) {
-              // Show the *gallon* value on the bar, not the percent
-              return `${tank.Volume} gal`;
+              // Was: return `${tank.Volume} gal`;
+              return `${Math.round(tank.Volume).toLocaleString()} gal`;
             }
-            // Don't show datalabel for empty
             return '';
           }
         }
