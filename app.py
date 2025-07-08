@@ -14,14 +14,24 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(16)
 
 # --- SQL Server connection info ---
-server = 'tankfluid-db.cxc6esakoxki.us-east-2.rds.amazonaws.com'
-database = 'FluidData'
-username = 'sqladmin'
-password = 'LAS2025!'
-driver = 'ODBC Driver 17 for SQL Server'
+#server = 'tankfluid-db.cxc6esakoxki.us-east-2.rds.amazonaws.com'
+#database = 'FluidData'
+#username = 'sqladmin'
+#password = 'LAS2025!'
+#driver = 'ODBC Driver 17 for SQL Server'
 
-connection_string = f"mssql+pyodbc://{username}:{password}@{server}/{database}?driver={driver.replace(' ', '+')}"
+db_env = os.environ.get('DB_ENV', 'aws')  # Default to AWS
+if db_env == 'azure':
+    connection_string = os.environ.get('DATABASE_URL_AZURE')
+else:
+    connection_string = os.environ.get('DATABASE_URL_AWS')
+
+if not connection_string:
+    raise RuntimeError("Database connection string is not set!")
 engine = create_engine(connection_string)
+
+#connection_string = f"mssql+pyodbc://{username}:{password}@{server}/{database}?driver={driver.replace(' ', '+')}"
+#engine = create_engine(connection_string)
 
 def get_user_site_access(user_id):
     with engine.connect() as conn:
