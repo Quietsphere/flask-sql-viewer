@@ -8,7 +8,10 @@ from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
+from dotenv import load_dotenv
 import secrets
+
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(16)
