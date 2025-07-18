@@ -2,11 +2,13 @@
 {% block title %}Tank Levels &mdash; FluidOps{% endblock %}
 
 {% block head %}
+  <!-- Bootstrap CSS FIRST -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
   <!-- DataTables & Chart.js CSS -->
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
   <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
+  <link rel="stylesheet" href="https://cdn.datatables.net/rowgroup/1.3.1/css/rowGroup.dataTables.min.css" />
   <style>
-    /* Additional tanklevels-specific styles */
     table.dataTable tfoot th {
       padding: 5px 8px;
     }
@@ -62,8 +64,20 @@
     <canvas id="lineChart" height="100"></canvas>
   </div>
 
+  <!-- Site Tabs -->
+  <ul class="nav nav-tabs mb-3" id="siteTabs" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link active" data-site="" href="#">All</a>
+    </li>
+    {% for site in unique_sites %}
+      <li class="nav-item">
+        <a class="nav-link" data-site="{{ site }}" href="#">{{ site }}</a>
+      </li>
+    {% endfor %}
+  </ul>
+
   <!-- Data Table -->
-  <table id="tankTable" class="table table-striped table-bordered nowrap w-100">
+  <table id="tankTable" class="table table-striped table-bordered nowrap compact w-100">
     <thead>
       <tr>
         <th>Tank</th>
@@ -96,7 +110,7 @@
         <td>{{ row['Owner'] }}</td>
         <td>{{ row['Supplier'] }}</td>
         <td>{{ row['Product'] }}</td>
-        <td>{{ row['ReadingTimestamp'] }}</td>
+        <td>{{ row['ReadingTimestamp'].strftime('%Y-%m-%d %H:%M') }}</td>
         <td>{{ row['Level'] }}</td>
         <td>{{ macros.format_gallons(row['Volume']) }}</td>
       </tr>
@@ -120,6 +134,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+  <script src="https://cdn.datatables.net/rowgroup/1.3.1/js/dataTables.rowGroup.min.js"></script>
   <script>
     // Chart Data from Flask
     const barChartData = {{ chart_data | tojson }};
@@ -144,8 +159,8 @@
         fill: false,
         borderWidth: 2,
         tension: 0.3,
-        pointRadius: 0,         // <-- Hides the points
-        pointHoverRadius: 4     // <-- Shows a point only on hover (optional)
+        pointRadius: 0,
+        pointHoverRadius: 4
       }));
 
       new Chart(document.getElementById("lineChart").getContext("2d"), {
@@ -182,7 +197,6 @@
       const barPercentsEmpty = barChartData.map((t, i) =>
         100 - barPercentsFull[i]
       );
-      const barTimestamps = barChartData.map(t => t.Timestamp);
 
       new Chart(document.getElementById("barChart").getContext("2d"), {
         type: "bar",
@@ -254,16 +268,20 @@
       });
 
       // --- DataTables Setup ---
-      // Setup - add a text input to each footer cell for column search
-      $('#tankTable tfoot th').each(function () {
+      $('#tankTable tfoot th').each(function (colIdx) {
         var title = $(this).text();
-        $(this).html('<input type="text" placeholder="Search ' + title + '" />');
+        $(this).html('<select class="form-select form-select-sm"><option value="">All</option></select>');
       });
 
-      // Initialize DataTable
+      // ---- PRE-COLLAPSE ALL GROUPS USING SERVER-PASSED TANK NAMES ----
+      const tankNames = {{ tank_names|tojson }};
+      var collapsedGroups = {};
+      tankNames.forEach(function(name) {
+        collapsedGroups[name] = true;
+      });
+
       var table = $('#tankTable').DataTable({
         pageLength: 25,
-        order: [[5, 'desc']], // Timestamp descending (6th column, zero-based index 5)
         dom: 'Bfltip',
         buttons: [
           'copy',
@@ -273,16 +291,71 @@
           'print',
           'colvis'
         ],
-        scrollX: true
+        scrollX: true,
+        className: "compact",
+        order: [[0, 'asc'], [5, 'desc']],
+        rowGroup: {
+          dataSrc: 0,
+          startRender: function (rows, group) {
+            var collapsed = !!collapsedGroups[group];
+            rows.nodes().each(function (r) {
+              r.style.display = collapsed ? 'none' : '';
+            });
+            return $('<tr/>')
+              .append('<td colspan="8" style="cursor:pointer;font-weight:bold;background:#f4f4f4;">'
+                + '<span style="margin-right:10px;">'
+                + (collapsed ? '&#9654;' : '&#9660;')
+                + '</span>'
+                + group
+                + ' <span style="color:#999;font-weight:normal;">(' + rows.count() + ' readings)</span>'
+                + '</td>')
+              .attr('data-name', group)
+              .toggleClass('collapsed', collapsed);
+          }
+        },
+        columns: [
+          { visible: true },   // Tank
+          { visible: false },  // Site
+          { visible: false },  // Owner
+          { visible: false },  // Supplier
+          { visible: true },   // Product
+          { visible: true },   // Timestamp
+          { visible: false },  // Level
+          { visible: true }    // Volume
+        ]
       });
 
-      // Apply the search for each column
+      // Click to expand/collapse
+      $('#tankTable tbody').on('click', 'tr.dtrg-start', function () {
+        var group = $(this).data('name');
+        collapsedGroups[group] = !collapsedGroups[group];
+        table.draw(false);
+      });
+
+      // Add Site tab filtering
+      $('#siteTabs .nav-link').on('click', function(e){
+        e.preventDefault();
+        $('#siteTabs .nav-link').removeClass('active');
+        $(this).addClass('active');
+        var site = $(this).data('site');
+        table.column(1).search(site ? '^' + site + '$' : '', true, false).draw();
+      });
+
+      // Populate each select with unique values and add filtering
       table.columns().every(function () {
-        var that = this;
-        $('input', this.footer()).on('keyup change clear', function () {
-          if (that.search() !== this.value) {
-            that.search(this.value).draw();
+        var column = this;
+        var select = $('select', column.footer());
+        column.data().unique().sort().each(function (d, j) {
+          var text = $('<div>').html(d).text();
+          if (select.find('option[value="' + text + '"]').length === 0) {
+            select.append('<option value="' + text + '">' + text + '</option>');
           }
+        });
+        select.on('change', function () {
+          var val = $.fn.dataTable.util.escapeRegex($(this).val());
+          column
+            .search(val ? '^' + val + '$' : '', true, false)
+            .draw();
         });
       });
     });

@@ -1,5 +1,4 @@
 import os
-import os
 
 # Only load .env when running locally (not on Render or most cloud platforms)
 if os.environ.get("RENDER") is None:
@@ -490,6 +489,9 @@ def tanklevels():
     """
     headers, rows = get_data(query, params)
 
+    unique_sites = sorted(set(row['SiteName'] for row in rows if row.get('SiteName')))
+    tank_names = sorted(set(row['PreferredTankName'] for row in rows if row.get('PreferredTankName')))
+
     # --- Asset Info ---
     with engine.connect() as conn:
         asset_info = {
@@ -560,7 +562,9 @@ def tanklevels():
                            month_offset=month_offset,
                            date_range=f"{selected_start:%b %d, %Y} - {selected_end:%b %d, %Y}",
                            chart_data=bar_data or [],
-                           chart_trends=trend_data or [])
+                           chart_trends=trend_data or [],
+                           unique_sites=unique_sites,
+                           tank_names=tank_names)
 
 
 @app.route("/admin/users", methods=["GET", "POST"])

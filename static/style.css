@@ -1,79 +1,156 @@
+/* -- GENERAL SITEWIDE STYLES -- */
 body {
-    font-family: 'Segoe UI', sans-serif;
-    background-color: #f9f9f9;
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+    background: #fff;
     margin: 0;
     padding: 0 20px;
 }
 
-nav {
-    background-color: #ffffff;
+nav,
+.navbar {
+    background-color: #0b416d !important;
+    border-radius: 0.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.06);
     padding: 10px 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
 }
 
-nav a {
-    margin-right: 20px;
-    font-weight: bold;
-    color: #007bff;
-    text-decoration: none;
+.navbar-brand img {
+    height: 40px;
+    margin-right: 12px;
+}
+.navbar-brand,
+.navbar-nav .nav-link.active {
+    color: #fff !important;
+    font-weight: 600;
+    letter-spacing: 1px;
+}
+.nav-link {
+    color: #fff !important;
+}
+.nav-link:hover,
+.nav-link:focus {
+    color: #5ea658 !important;
+}
+.btn-primary {
+    background: #0b416d !important;
+    border: none;
+}
+.btn-success {
+    background: #5ea658 !important;
+    border: none;
+}
+.text-accent {
+    color: #5ea658 !important;
+}
+.text-secondary {
+    color: #998f86 !important;
+}
+footer {
+    border-top: 1px solid #e9ecef;
 }
 
-nav a:hover {
-    text-decoration: underline;
-}
-
+/* --- HEADINGS --- */
 h2 {
     color: #333;
 }
 
-table {
+/* --- TABLES & DATATABLES --- */
+table,
+.dataTable {
     border-collapse: collapse;
     width: 100%;
     background-color: #fff;
 }
-
-th, td {
+th,
+td {
     border: 1px solid #ccc;
     padding: 10px;
     text-align: left;
 }
-
 th {
     background-color: #f0f0f0;
 }
-
 tr:nth-child(even) {
     background-color: #f9f9f9;
 }
+table.dataTable tfoot th {
+    padding: 5px 8px;
+}
+table.dataTable tfoot input {
+    width: 100%;
+    padding: 2px;
+    box-sizing: border-box;
+    font-size: 0.95em;
+}
 
-/* --- Select2 Enhancements --- */
+/* --- NAV-TABS (Tabs above table) --- */
+.nav-tabs .nav-link {
+    color: #0d6efd !important;
+    background: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    border-bottom: none !important;
+    font-weight: 500;
+    transition: background 0.2s, color 0.2s;
+}
+.nav-tabs .nav-link.active {
+    color: #495057 !important;
+    background: #fff !important;
+    border-color: #dee2e6 #dee2e6 #fff !important;
+}
+.nav-tabs .nav-link:hover {
+    color: #0a58ca !important;
+    background-color: #e9ecef !important;
+}
 
+/* --- FLASH MESSAGES --- */
+.flashes {
+    list-style-type: none;
+    padding: 0;
+}
+.flashes li {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 4px;
+}
+.flashes li.success {
+    background-color: #d4edda;
+    color: #155724;
+}
+.flashes li.danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+.flashes li.warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+.flashes li.info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+/* --- SELECT2 ENHANCEMENTS (if you use Select2 anywhere) --- */
 .filter-select {
     width: 250px;
     margin-right: 1em;
     margin-bottom: 1em;
 }
-
-/* Make selected items readable in multi-selects */
 .select2-container--default .select2-selection--multiple {
     min-height: 38px;
     max-height: 100px;
     overflow-y: auto;
     overflow-x: hidden;
 }
-
-/* Allow wrapped text for selected options */
 .select2-container--default .select2-selection--multiple .select2-selection__rendered {
     display: block;
     white-space: normal;
 }
-
-/* Ensure dropdowns display over other content */
 .select2-container {
     z-index: 9999;
 }
 
+/* --- PAGE LAYOUT/UTILITY CLASSES --- */
 .top-container {
     display: flex;
     flex-direction: column;
@@ -87,6 +164,8 @@ tr:nth-child(even) {
     margin-bottom: 0.5em;
     width: 100%;
 }
+
+/* --- OTHERS --- */
 .flashes {
     list-style-type: none;
     padding: 0;
@@ -117,6 +196,3 @@ tr:nth-child(even) {
     background-color: #d1ecf1;
     color: #0c5460;
 }
-
-
-
