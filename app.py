@@ -1,4 +1,14 @@
 import os
+import os
+
+# Only load .env when running locally (not on Render or most cloud platforms)
+if os.environ.get("RENDER") is None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # Don't crash if dotenv isn't available
+
 from flask import (
     Flask, render_template, request, session, redirect, url_for, flash
 )
@@ -8,10 +18,7 @@ from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-from dotenv import load_dotenv
 import secrets
-
-load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(16)
